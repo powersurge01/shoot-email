@@ -1,6 +1,6 @@
 {
   "name": "shoot-email",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Terminal-first email client/service prototype.",
   "type": "module",
   "bin": {
@@ -17,8 +17,9 @@
     "backend:deploy": "wrangler deploy --config workers/backend/wrangler.jsonc",
     "backend:build": "wrangler deploy --dry-run --config workers/backend/wrangler.jsonc",
     "smoke:hosted": "node src/smokeHosted.js",
+    "smoke:remote-mcp": "node src/smokeRemoteMcp.js",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js",
+    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js test/remoteMcp.test.js",
     "test:integration": "node src/runIntegrationTests.js"
   },
   "dependencies": {

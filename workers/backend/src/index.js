@@ -6,6 +6,12 @@ import {
   handleInboundWebhook,
   handleOpenAiContext,
 } from '../../../src/httpHandlers.js';
+import {
+  authorizeRemoteMcpDemo,
+  handleRemoteMcpRequest,
+  remoteMcpMisconfiguredResponse,
+  remoteMcpUnauthorizedResponse,
+} from '../../../src/remoteMcp.js';
 
 const MAX_JSON_BODY_BYTES = 1_000_000;
 
@@ -20,6 +26,27 @@ export async function handleBackendRequest(request, env, options = {}) {
 
   if (request.method === 'GET' && url.pathname === '/health') {
     return jsonResponse(getHealthResponse(env.SHOOT_EMAIL_ENV));
+  }
+
+  let remoteMcpAuthorization;
+  if (url.pathname === '/mcp') {
+    remoteMcpAuthorization = await authorizeRemoteMcpDemo(request, env);
+    if (!remoteMcpAuthorization.enabled) {
+      return jsonResponse({ status: 404, body: { ok: false, error: 'Not found.' } });
+    }
+    if (!remoteMcpAuthorization.configured) {
+      return remoteMcpMisconfiguredResponse();
+    }
+    if (!remoteMcpAuthorization.authorized) {
+      return remoteMcpUnauthorizedResponse();
+    }
+    if (request.method !== 'POST') {
+      return Response.json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Method not allowed. Use POST for stateless MCP.' },
+        id: null,
+      }, { status: 405, headers: { Allow: 'POST' } });
+    }
   }
 
   if (!isDatabaseRoute(request.method, url.pathname)) {
@@ -43,6 +70,10 @@ export async function handleBackendRequest(request, env, options = {}) {
     return await runWithDatabase(database, async () => {
       if (request.method === 'GET' && url.pathname === '/ready') {
         return jsonResponse(await getReadinessResponse());
+      }
+
+      if (request.method === 'POST' && url.pathname === '/mcp') {
+        return handleRemoteMcpRequest(request, remoteMcpAuthorization.principal);
       }
 
       if (request.method === 'POST' && url.pathname === '/webhooks/email/inbound') {
@@ -70,7 +101,9 @@ export async function handleBackendRequest(request, env, options = {}) {
       });
     });
   } catch (error) {
-    const status = error.code === 'invalid_json_body' ? 400 : 500;
+    const status = ['invalid_json_body', 'invalid_mcp_body'].includes(error.code)
+      ? 400
+      : 500;
     if (status === 500) {
       console.error('Backend Worker request failed.', error);
     }
@@ -91,6 +124,7 @@ export async function handleBackendRequest(request, env, options = {}) {
 function isDatabaseRoute(method, pathname) {
   return (
     (method === 'GET' && pathname === '/ready')
+    || (method === 'POST' && pathname === '/mcp')
     || (method === 'POST' && pathname === '/webhooks/email/inbound')
     || (method === 'POST' && pathname === '/apps/openai/context')
   );

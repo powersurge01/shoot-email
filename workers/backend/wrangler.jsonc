@@ -14,7 +14,10 @@
 		"INBOUND_DOMAIN": "yoyowza.com",
 		"MAIL_PROVIDER": "mock",
 		"OUTBOUND_SENDING_ENABLED": "false",
-		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false"
+		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false",
+		"ENABLE_REMOTE_MCP_DEMO": "true",
+		"REMOTE_MCP_DEMO_SUBJECT": "hackathon-judge-demo-v1",
+		"REMOTE_MCP_DEMO_SESSION": "hackathon-judge-session-v1"
 	},
 	"hyperdrive": [
 		{

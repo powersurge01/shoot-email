@@ -13,6 +13,7 @@ This implements the first milestone:
 - optional Cloudflare Email Sending outbound provider
 - Cloudflare Email Routing Worker payload ingestion
 - hosted Cloudflare backend Worker connected to Neon through Hyperdrive
+- restricted hosted Streamable HTTP MCP judge demo
 - CLI commands for address, send, inbox, and read
 
 ## Setup
@@ -73,6 +74,7 @@ The backend Worker currently exposes:
 GET  /health
 GET  /ready
 POST /webhooks/email/inbound
+POST /mcp
 ```
 
 `/health` verifies the Worker is running. `/ready` also verifies the Hyperdrive
@@ -108,6 +110,16 @@ It uses the `shoot-email` Neon project in AWS Oregon through the
 `shoot-email-neon` Hyperdrive configuration. Hyperdrive query caching is
 disabled and its origin connection limit is five. Staging keeps
 `MAIL_PROVIDER=mock` and `OUTBOUND_SENDING_ENABLED=false`.
+
+The `/mcp` route is a restricted Build Week judge demo protected by a bearer
+credential. It maps each credential suffix to an isolated, server-controlled
+principal and seeds eight synthetic messages on first initialization. It never
+trusts caller-supplied `_meta` identity. This is not the production ChatGPT
+authentication design; OAuth 2.1 remains the required follow-up. Complete judge
+instructions are in `docs/hackathon/TESTING.md`.
+
+Demo principals are also rejected directly by `send_text_email`, independently
+of the environment-level outbound kill switch.
 
 The production Email Routing Worker now posts inbound messages to this hosted
 backend. Both a synthetic webhook smoke test and a real Gmail-to-Email-Routing
@@ -495,6 +507,52 @@ For ChatGPT, identity comes from request metadata keys `openai/subject`,
 identity as tool arguments. A future remote MCP deployment must authenticate
 the ChatGPT connection before trusting that metadata. The development fallback
 is only for local stdio clients that do not supply ChatGPT Apps metadata.
+
+## Remote MCP Demo
+
+The hosted Build Week demo uses the same tool and output contracts over
+stateless Streamable HTTP. The bearer secret is supplied privately in the
+submission testing instructions. Append a random suffix to receive an isolated
+mailbox, then register it with Codex:
+
+```bash
+export SHOOT_EMAIL_DEMO_TOKEN="${SHOOT_EMAIL_DEMO_SECRET}.$(openssl rand -hex 8)"
+codex mcp add shoot-email-demo \
+  --url https://shoot-email-backend.powersurge.workers.dev/mcp \
+  --bearer-token-env-var SHOOT_EMAIL_DEMO_TOKEN
+```
+
+Run a protocol and seeded-inbox smoke test with:
+
+```bash
+npm run smoke:remote-mcp
+```
+
+The hosted demo keeps real outbound delivery disabled. See
+`docs/hackathon/TESTING.md` for judge prompts and the security boundary.
+
+## Built With Codex
+
+Codex was used as the engineering collaborator throughout the project: reading
+and testing the repository, researching current provider and Apps SDK behavior,
+implementing migrations and service boundaries, deploying Cloudflare Workers,
+and running black-box CLI and MCP evaluations. Product decisions remained
+explicitly user-directed, including the LLM-first inbox semantics,
+acknowledgement lifecycle, Cloudflare-first architecture, abuse limits, and the
+choice to ship a restricted hackathon transport before the OAuth production
+milestone.
+
+Codex accelerated repetitive verification and cross-layer changes, especially
+the database-backed contract tests, Cloudflare/Neon deployment checks, and the
+trusted-principal transport seam. The key engineering decision for this
+submission is that the demo bearer credential produces a request principal
+outside tool arguments; replacing it with OAuth later does not require rewriting
+the mailbox service or MCP tool contracts.
+
+Because this project predates Build Week, `docs/hackathon/BUILD_LOG.md` clearly
+separates the pre-existing baseline from the work added for the submission. The
+two preserved black-box transcripts also show how fresh Codex sessions exposed
+contract problems that were then hardened in code.
 
 ## Tests
 

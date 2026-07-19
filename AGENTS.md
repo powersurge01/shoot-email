@@ -48,7 +48,10 @@ they are not supported.
 Run migrations directly against Neon from a trusted local or CI environment,
 never from a Worker request. Keep the Email Routing Worker separate until the
 hosted backend passes staging verification. Do not expose the OpenAI context or
-remote MCP path publicly before authentication is implemented. The complete
+production remote MCP path publicly before OAuth authentication is implemented.
+The temporary Build Week judge demo is the only exception: it uses a restricted
+bearer credential, a server-controlled isolated demo principal, synthetic data,
+the mock provider, and a disabled outbound kill switch. The complete
 rationale is recorded in `docs/adr/001-cloudflare-workers-neon-hyperdrive.md`.
 
 ## Identity And Addresses
@@ -357,6 +360,9 @@ arguments.
   never enable that fallback in production.
 - Authenticate the future remote ChatGPT connection before trusting OpenAI
   identity metadata.
+- Keep the hackathon bearer transport explicitly temporary. It must ignore
+  caller-supplied identity metadata, isolate mailboxes by credential, auto-seed
+  synthetic messages only, and keep real outbound delivery disabled.
 
 ## Practical First Milestone
 

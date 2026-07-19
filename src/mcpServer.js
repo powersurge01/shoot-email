@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { contractError, withContract } from './contract.js';
 import { mcpOutputSchemas } from './mcpSchemas.js';
+import { seedDemoMailbox } from './demoMailbox.js';
 import { normalizeOpenAiAppsContext } from './openAiAppsContext.js';
 import {
   acknowledgeMessages,
@@ -25,10 +26,10 @@ const batchInput = z.object({
   cursor: z.string().min(1).optional(),
 }).strict();
 
-export function createShootEmailMcpServer() {
+export function createShootEmailMcpServer({ principal } = {}) {
   const server = new McpServer({
     name: 'shoot-email',
-    version: '0.1.0',
+    version: '0.2.0',
   }, {
     instructions: [
       'Shoot Email is an LLM-first text email service.',
@@ -39,6 +40,7 @@ export function createShootEmailMcpServer() {
       'Reuse the same requestId when retrying send_text_email after a timeout.',
     ].join(' '),
   });
+  const withResolvedMailbox = (handler) => withMailbox(handler, principal);
 
   register(server, 'initialize_mailbox', {
     title: 'Initialize mailbox',
@@ -48,8 +50,11 @@ export function createShootEmailMcpServer() {
     outputSchema: mcpOutputSchemas.initializeMailbox,
     annotations: writeAnnotations({ idempotent: true, openWorld: false }),
   }, async (_args, extra) => {
-    const context = readOpenAiContext(extra);
+    const context = readOpenAiContext(extra, principal);
     const resolved = await findOrCreateOpenAiContext(context);
+    if (principal?.demo && resolved.userCreated) {
+      await seedDemoMailbox(resolved.user.email_alias);
+    }
     const identity = await getSenderIdentity(resolved.user.id);
     return {
       created: resolved.userCreated,
@@ -64,7 +69,7 @@ export function createShootEmailMcpServer() {
     inputSchema: emptyInput,
     outputSchema: mcpOutputSchemas.serviceStatus,
     annotations: readAnnotations(),
-  }, withMailbox(async (_args, _extra, context) => {
+  }, withResolvedMailbox(async (_args, _extra, context) => {
     return getServiceStatus(context.user.id, {
       chatSessionId: context.chatSession?.id,
     });
@@ -76,7 +81,7 @@ export function createShootEmailMcpServer() {
     inputSchema: emptyInput,
     outputSchema: mcpOutputSchemas.mailboxIdentity,
     annotations: readAnnotations(),
-  }, withMailbox(async (_args, _extra, context) => {
+  }, withResolvedMailbox(async (_args, _extra, context) => {
     return getSenderIdentity(context.user.id);
   }));
 
@@ -92,7 +97,12 @@ export function createShootEmailMcpServer() {
     }).strict(),
     outputSchema: mcpOutputSchemas.sendTextEmail,
     annotations: writeAnnotations({ idempotent: true, openWorld: true }),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
+    if (principal?.demo) {
+      const error = new Error('Outbound email is disabled for hackathon demo principals.');
+      error.code = 'demo_outbound_disabled';
+      throw error;
+    }
     return sendEmail({
       userId: context.user.id,
       chatSessionId: context.chatSession?.id,
@@ -110,7 +120,7 @@ export function createShootEmailMcpServer() {
     inputSchema: batchInput,
     outputSchema: mcpOutputSchemas.inboundBatch,
     annotations: readAnnotations(),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return listInbox({ userId: context.user.id, ...args });
   }));
 
@@ -123,7 +133,7 @@ export function createShootEmailMcpServer() {
     }).strict(),
     outputSchema: mcpOutputSchemas.acknowledgeMessages,
     annotations: writeAnnotations({ idempotent: true, openWorld: false }),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return acknowledgeMessages(args.messageIds, { userId: context.user.id });
   }));
 
@@ -134,7 +144,7 @@ export function createShootEmailMcpServer() {
     inputSchema: z.object({ messageId: z.uuid() }).strict(),
     outputSchema: mcpOutputSchemas.getMessage,
     annotations: readAnnotations(),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return readMessage(args.messageId, { userId: context.user.id });
   }));
 
@@ -145,7 +155,7 @@ export function createShootEmailMcpServer() {
     inputSchema: batchInput,
     outputSchema: mcpOutputSchemas.inboundBatch,
     annotations: readAnnotations(),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return listHistory({ userId: context.user.id, ...args });
   }));
 
@@ -156,7 +166,7 @@ export function createShootEmailMcpServer() {
     inputSchema: batchInput,
     outputSchema: mcpOutputSchemas.outboundBatch,
     annotations: readAnnotations(),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return listOutboundHistory({ userId: context.user.id, ...args });
   }));
 
@@ -170,7 +180,7 @@ export function createShootEmailMcpServer() {
     }).strict(),
     outputSchema: mcpOutputSchemas.outboundStatus,
     annotations: readAnnotations(),
-  }, withMailbox(async (args, _extra, context) => {
+  }, withResolvedMailbox(async (args, _extra, context) => {
     return getOutboundStatus({
       userId: context.user.id,
       messageId: args.lookupBy === 'messageId' ? args.id : undefined,
@@ -192,9 +202,9 @@ function register(server, name, config, handler) {
   });
 }
 
-function withMailbox(handler) {
+function withMailbox(handler, principal) {
   return async (args, extra) => {
-    const identity = readOpenAiContext(extra);
+    const identity = readOpenAiContext(extra, principal);
     const context = await findOpenAiContext(identity);
     if (!context) {
       const error = new Error(
@@ -207,7 +217,20 @@ function withMailbox(handler) {
   };
 }
 
-function readOpenAiContext(extra = {}) {
+function readOpenAiContext(extra = {}, principal) {
+  if (principal) {
+    if (!principal.subject) {
+      const error = new Error('Trusted request principal is missing a subject.');
+      error.code = 'invalid_request_principal';
+      throw error;
+    }
+    return {
+      subject: principal.subject,
+      session: principal.session || null,
+      organization: principal.organization || null,
+    };
+  }
+
   const context = normalizeOpenAiAppsContext({ _meta: extra._meta });
   if (context.subject) return context;
 

@@ -19,7 +19,7 @@ const { closePool, query } = await import('../src/db.js');
 const { normalizeInboundPayload } = await import('../src/inboundEmail.js');
 const { createShootEmailMcpServer } = await import('../src/mcpServer.js');
 const { resetDatabase } = await import('../src/resetDb.js');
-const { ingestInboundMessage } = await import('../src/services.js');
+const { findOpenAiContext, ingestInboundMessage } = await import('../src/services.js');
 
 const expectedToolNames = [
   'acknowledge_messages',
@@ -349,8 +349,96 @@ test('stdio entry point is usable by a local MCP client', async () => {
   }
 });
 
-async function connectInMemory() {
-  const server = createShootEmailMcpServer();
+test('trusted request principal overrides caller-supplied OpenAI metadata', async () => {
+  const principal = {
+    subject: 'trusted-remote-subject',
+    session: 'trusted-remote-session',
+    organization: null,
+  };
+  const connection = await connectInMemory(principal);
+
+  try {
+    const initialized = await callTool(
+      connection.client,
+      'initialize_mailbox',
+      {},
+      openAiMeta('spoofed-subject', 'spoofed-session'),
+    );
+    assertSuccess(initialized);
+
+    assert.ok(await findOpenAiContext(principal));
+    assert.equal(await findOpenAiContext({
+      subject: 'spoofed-subject',
+      session: 'spoofed-session',
+      organization: null,
+    }), null);
+
+    const identity = await connection.client.callTool({
+      name: 'get_mailbox_identity',
+      arguments: {},
+    });
+    assertSuccess(identity);
+  } finally {
+    await connection.close();
+  }
+});
+
+test('new hackathon demo principals receive an isolated synthetic inbox once', async () => {
+  const connection = await connectInMemory({
+    subject: 'hackathon-demo-seeded-subject',
+    session: 'hackathon-demo-seeded-session',
+    organization: null,
+    demo: true,
+  });
+
+  try {
+    assertSuccess(await connection.client.callTool({
+      name: 'initialize_mailbox',
+      arguments: {},
+    }));
+    assertSuccess(await connection.client.callTool({
+      name: 'initialize_mailbox',
+      arguments: {},
+    }));
+
+    const inbox = await connection.client.callTool({
+      name: 'list_pending_messages',
+      arguments: {},
+    });
+    assertSuccess(inbox);
+    assert.equal(inbox.structuredContent.messages.length, 8);
+    assert.deepEqual(
+      inbox.structuredContent.messages.map((message) => message.subject),
+      [
+        'Launch checklist needs final review',
+        'Customer feedback: export workflow',
+        'Invoice INV-2048 due Friday',
+        'Agenda for product review',
+        'Resolved: unusual webhook retry volume',
+        'Weekly mailbox operations summary',
+        'Re: Integration test complete',
+        'Untrusted email content example',
+      ],
+    );
+
+    const sendAttempt = await connection.client.callTool({
+      name: 'send_text_email',
+      arguments: {
+        requestId: 'a0000000-0000-4000-8000-000000000099',
+        to: 'recipient@example.com',
+        subject: 'Demo must not send',
+        text: 'This must be rejected before any provider call.',
+      },
+    });
+    assert.equal(sendAttempt.isError, true);
+    assert.equal(sendAttempt.structuredContent.error.code, 'demo_outbound_disabled');
+  } finally {
+    await connection.close();
+  }
+});
+
+async function connectInMemory(principal) {
+  const server = createShootEmailMcpServer({ principal });
   const client = new Client({ name: 'shoot-email-test-client', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
