@@ -1,0 +1,8 @@
+{
+  "name": "shoot-email-router",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-11",
+  "vars": {
+    "BACKEND_INBOUND_WEBHOOK_URL": "https://shoot-email-backend.powersurge.workers.dev/webhooks/email/inbound"
+  }
+}

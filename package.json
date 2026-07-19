@@ -1,0 +1,35 @@
+{
+  "name": "shoot-email",
+  "version": "0.1.0",
+  "description": "Terminal-first email client/service prototype.",
+  "type": "module",
+  "bin": {
+    "shoot-email": "./src/cli.js",
+    "shoot-email-mcp": "./src/mcpStdio.js"
+  },
+  "scripts": {
+    "db:migrate": "node src/migrate.js",
+    "db:reset": "node src/resetDb.js --yes",
+    "start:tunnel": "cloudflared tunnel --config ~/.cloudflared/shoot-email-dev.yml run",
+    "start:webhook": "node src/server.js",
+    "start:mcp": "node src/mcpStdio.js",
+    "backend:dev": "wrangler dev --config workers/backend/wrangler.jsonc",
+    "backend:deploy": "wrangler deploy --config workers/backend/wrangler.jsonc",
+    "backend:build": "wrangler deploy --dry-run --config workers/backend/wrangler.jsonc",
+    "smoke:hosted": "node src/smokeHosted.js",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js",
+    "test:integration": "node src/runIntegrationTests.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  }
+}
