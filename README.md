@@ -553,7 +553,8 @@ codex mcp add shoot-email \
   -- node /Users/powersurge/Documents/OpenAI/ChatGPT-APPs/shoot-email/src/mcpStdio.js
 ```
 
-Start a fresh Codex task after adding the server. Call `initialize_mailbox`
+Start a fresh Codex task after adding the server. Call
+`shoot_email.initialize_mailbox`
 before other mailbox tools. The local development subject produces a stable
 mailbox through `user_identities`; changing the subject produces a different
 mailbox. Do not set `MCP_ALLOW_DEV_IDENTITY` in production.
@@ -561,17 +562,22 @@ mailbox. Do not set `MCP_ALLOW_DEV_IDENTITY` in production.
 The user-facing MCP surface contains only:
 
 ```text
-initialize_mailbox
+shoot_email.initialize_mailbox
 get_service_status
 get_mailbox_identity
 send_text_email
-list_pending_messages
+shoot_email.check_inbox
 acknowledge_messages
 get_message
 list_processed_messages
 list_outbound_messages
 get_outbound_message_status
 ```
+
+`acknowledge_messages` is intentionally separate from checking or summarizing
+mail. MCP clients should call it only when the user explicitly asks to
+acknowledge or mark specific messages handled; retrieval alone is never consent
+to change message state.
 
 Migration, account-tier, suspension, and abuse-administration operations are
 intentionally absent. Tool results carry both MCP text content and the same

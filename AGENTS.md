@@ -340,8 +340,8 @@ the internal `user.id` and optional `chat_session.id` into services; they must
 never use the CLI local-config identity or accept subject/session as tool
 arguments.
 
-- Require the idempotent `initialize_mailbox` tool before other mailbox tools
-  provision or access a mailbox.
+- Require the idempotent `shoot_email.initialize_mailbox` tool before any other
+  mailbox tool provisions or accesses a mailbox.
 - Keep migration, tier changes, suspensions, and abuse administration outside
   the user-facing MCP tool list.
 - Return both MCP text content and the versioned structured service contract.

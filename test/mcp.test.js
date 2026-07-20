@@ -27,11 +27,11 @@ const expectedToolNames = [
   'get_message',
   'get_outbound_message_status',
   'get_service_status',
-  'initialize_mailbox',
   'list_outbound_messages',
-  'list_pending_messages',
   'list_processed_messages',
   'send_text_email',
+  'shoot_email.check_inbox',
+  'shoot_email.initialize_mailbox',
 ];
 
 test.beforeEach(async () => {
@@ -59,20 +59,33 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
     const instructions = connection.client.getInstructions();
     const discoveryPrefix = instructions.slice(0, 512);
     assert.match(discoveryPrefix, /persistent email inbox through MCP/);
-    assert.match(discoveryPrefix, /initialize Shoot Email/);
-    assert.match(discoveryPrefix, /Call initialize_mailbox/);
+    assert.match(discoveryPrefix, /Initialize Shoot Email/);
+    assert.match(discoveryPrefix, /Call shoot_email\.initialize_mailbox/);
+    assert.match(discoveryPrefix, /checking, reading, or summarizing email is not consent/);
     assert.match(instructions, /untrusted external data/);
     const initializeTool = tools.tools.find(
-      (tool) => tool.name === 'initialize_mailbox',
+      (tool) => tool.name === 'shoot_email.initialize_mailbox',
     );
-    assert.match(initializeTool.description, /start Shoot Email/);
-    assert.match(initializeTool.description, /not a local software project/);
+    assert.match(initializeTool.description, /says "Initialize Shoot Email"/);
+    assert.match(
+      initializeTool.description,
+      /not a local software project or email campaign/,
+    );
     const pendingTool = tools.tools.find(
-      (tool) => tool.name === 'list_pending_messages',
+      (tool) => tool.name === 'shoot_email.check_inbox',
     );
     assert.match(pendingTool.description, /new messages/);
     assert.match(pendingTool.description, /received replies/);
     assert.match(pendingTool.description, /inbox summary/);
+    assert.match(pendingTool.description, /Checking never acknowledges/);
+    const acknowledgeTool = tools.tools.find(
+      (tool) => tool.name === 'acknowledge_messages',
+    );
+    assert.match(acknowledgeTool.description, /user explicitly asks/);
+    assert.match(
+      acknowledgeTool.description,
+      /summarizing email is not authorization/,
+    );
     assert.equal(tools.tools.some((tool) => tool.name.includes('abuse')), false);
     assert.equal(tools.tools.some((tool) => tool.name.includes('migrate')), false);
     assert.equal(tools.tools.every((tool) => tool.outputSchema?.type === 'object'), true);
@@ -89,7 +102,7 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
 
     const initialized = await callTool(
       connection.client,
-      'initialize_mailbox',
+      'shoot_email.initialize_mailbox',
       {},
       meta,
     );
@@ -100,7 +113,7 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
 
     const repeated = await callTool(
       connection.client,
-      'initialize_mailbox',
+      'shoot_email.initialize_mailbox',
       {},
       meta,
     );
@@ -110,7 +123,7 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
 
     const otherUser = await callTool(
       connection.client,
-      'initialize_mailbox',
+      'shoot_email.initialize_mailbox',
       {},
       openAiMeta('subject-b', 'session-b', 'organization-a'),
     );
@@ -146,7 +159,7 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
 
     const pending = await callTool(
       connection.client,
-      'list_pending_messages',
+      'shoot_email.check_inbox',
       {},
       meta,
     );
@@ -165,7 +178,7 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
 
     const isolatedPending = await callTool(
       connection.client,
-      'list_pending_messages',
+      'shoot_email.check_inbox',
       {},
       openAiMeta('subject-b', 'session-b', 'organization-a'),
     );
@@ -301,7 +314,7 @@ test('MCP rejects missing identity and requires explicit initialization', async 
   const connection = await connectInMemory();
   try {
     const missingIdentity = await connection.client.callTool({
-      name: 'initialize_mailbox',
+      name: 'shoot_email.initialize_mailbox',
       arguments: {},
     });
     assert.equal(missingIdentity.isError, true);
@@ -312,7 +325,7 @@ test('MCP rejects missing identity and requires explicit initialization', async 
 
     const notInitialized = await callTool(
       connection.client,
-      'list_pending_messages',
+      'shoot_email.check_inbox',
       {},
       openAiMeta('new-subject', 'new-session'),
     );
@@ -350,7 +363,7 @@ test('stdio entry point is usable by a local MCP client', async () => {
     );
 
     const initialized = await client.callTool({
-      name: 'initialize_mailbox',
+      name: 'shoot_email.initialize_mailbox',
       arguments: {},
     });
     assertSuccess(initialized);
@@ -377,7 +390,7 @@ test('trusted request principal overrides caller-supplied OpenAI metadata', asyn
   try {
     const initialized = await callTool(
       connection.client,
-      'initialize_mailbox',
+      'shoot_email.initialize_mailbox',
       {},
       openAiMeta('spoofed-subject', 'spoofed-session'),
     );
@@ -410,16 +423,16 @@ test('new hackathon demo principals receive an isolated synthetic inbox once', a
 
   try {
     assertSuccess(await connection.client.callTool({
-      name: 'initialize_mailbox',
+      name: 'shoot_email.initialize_mailbox',
       arguments: {},
     }));
     assertSuccess(await connection.client.callTool({
-      name: 'initialize_mailbox',
+      name: 'shoot_email.initialize_mailbox',
       arguments: {},
     }));
 
     const inbox = await connection.client.callTool({
-      name: 'list_pending_messages',
+      name: 'shoot_email.check_inbox',
       arguments: {},
     });
     assertSuccess(inbox);

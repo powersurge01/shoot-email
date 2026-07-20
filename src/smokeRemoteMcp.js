@@ -17,9 +17,15 @@ const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
 try {
   await client.connect(transport);
   const tools = await client.listTools();
-  const initialized = await client.callTool({ name: 'initialize_mailbox', arguments: {} });
+  const initialized = await client.callTool({
+    name: 'shoot_email.initialize_mailbox',
+    arguments: {},
+  });
   const status = await client.callTool({ name: 'get_service_status', arguments: {} });
-  const inbox = await client.callTool({ name: 'list_pending_messages', arguments: {} });
+  const inbox = await client.callTool({
+    name: 'shoot_email.check_inbox',
+    arguments: {},
+  });
   console.log(JSON.stringify({
     ok: initialized.structuredContent?.ok === true
       && status.structuredContent?.ok === true
