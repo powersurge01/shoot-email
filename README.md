@@ -16,6 +16,12 @@ replies through webhooks, retrieve complete messages, preserve conversation
 history, and explicitly acknowledge the messages it has successfully handled.
 The same service contract is available through MCP and a terminal CLI.
 
+## Demo
+
+[![Shoot Email: AI-native email for ChatGPT](docs/assets/shoot-email-ai-assistant-mockup.png)](https://youtu.be/TXODrUYFxyM)
+
+**[Watch the Shoot Email demo on YouTube](https://youtu.be/TXODrUYFxyM)**
+
 ## Why Agent-Native Email
 
 Traditional email clients optimize for a person scanning folders, opening one
@@ -26,8 +32,8 @@ that needs bounded context, reliable retries, and explicit state transitions:
   and act without making a second call for every email.
 - Retrieval and acknowledgement are separate, so a failed model invocation
   does not silently lose work.
-- Inbound email is labeled as untrusted external content and includes a
-  prompt-injection test case in the hosted demo.
+- Inbound email is labeled as untrusted external content so email text cannot
+  silently become authorization for additional tool calls.
 - Outbound requests are idempotent, preventing an agent retry from sending the
   same message twice.
 - Stable mailbox identities and message history persist beyond one chat
@@ -84,7 +90,7 @@ The production path uses Cloudflare for DNS, routing, edge processing, and
 outbound delivery, while Neon stores identities, sessions, messages, delivery
 state, and future embeddings. The hosted judge demo exercises the real remote
 MCP and database path but deliberately uses the mock provider and disables
-outbound delivery.
+real outbound delivery.
 
 ## Hosted Demo
 
@@ -94,9 +100,9 @@ The judge demo is available at:
 https://shoot-email-backend.powersurge.workers.dev/mcp
 ```
 
-Each judge receives an isolated synthetic mailbox containing eight recognizable
-messages, including one with hostile instructions for testing prompt-injection
-handling. The bearer secret is supplied privately with the submission. See
+Each judge receives an isolated synthetic mailbox containing three landlord
+replies for the apartment-hunting demo. The bearer secret is supplied privately
+with the submission. See
 [`docs/hackathon/TESTING.md`](docs/hackathon/TESTING.md) for the exact setup,
 black-box prompts, and security boundary.
 
