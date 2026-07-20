@@ -1,20 +1,113 @@
 # Shoot Email
 
-Terminal-first email client/service prototype for sending text emails and reading received text emails.
+**A real email inbox for AI agents.**
 
-## Current Milestone
+Current AI assistants can help read email and generate a polished reply, but
+many connected-email workflows still stop at the draft. A human has to send
+the message, watch for a response, decide what should happen next, and keep the
+conversation moving manually.
 
-This implements the first milestone:
+Shoot Email explores a different question: **what would email look like if it
+were designed from the ground up for AI agents instead of human inboxes?**
 
-- local mailbox initialization
-- stable generated inbound alias
-- Postgres schema with pgvector enabled for future embeddings
-- mock outbound mail provider
-- optional Cloudflare Email Sending outbound provider
-- Cloudflare Email Routing Worker payload ingestion
-- hosted Cloudflare backend Worker connected to Neon through Hyperdrive
-- restricted hosted Streamable HTTP MCP judge demo
-- CLI commands for address, send, inbox, and read
+Shoot Email is an LLM-first email service and MCP server that gives ChatGPT and
+other AI agents a persistent mailbox. An agent can send text email, receive
+replies through webhooks, retrieve complete messages, preserve conversation
+history, and explicitly acknowledge the messages it has successfully handled.
+The same service contract is available through MCP and a terminal CLI.
+
+## Why Agent-Native Email
+
+Traditional email clients optimize for a person scanning folders, opening one
+message at a time, and marking messages read. Shoot Email optimizes for an LLM
+that needs bounded context, reliable retries, and explicit state transitions:
+
+- Full message bodies are returned in bounded batches so an agent can summarize
+  and act without making a second call for every email.
+- Retrieval and acknowledgement are separate, so a failed model invocation
+  does not silently lose work.
+- Inbound email is labeled as untrusted external content and includes a
+  prompt-injection test case in the hosted demo.
+- Outbound requests are idempotent, preventing an agent retry from sending the
+  same message twice.
+- Stable mailbox identities and message history persist beyond one chat
+  session.
+- Configurable quotas, recipient limits, reserved aliases, and a global kill
+  switch protect the shared sending domain from obvious abuse.
+
+The result is not another inbox UI. It is a small, structured communication
+layer that an AI agent can reason over and operate safely.
+
+## What Works Today
+
+The project currently includes:
+
+- A local CLI and a 10-tool MCP interface over the same versioned service
+  contract.
+- Stable generated mailbox aliases with optional registered custom aliases.
+- Real inbound delivery through Cloudflare Email Routing and an Email Worker.
+- Text-only outbound delivery through Cloudflare Email Sending, with a mock
+  provider for safe local and judge testing.
+- PostgreSQL persistence with pgvector enabled for future semantic search.
+- A hosted Cloudflare Worker connected to Neon through Hyperdrive.
+- Idempotent inbound ingestion, idempotent outbound requests, message history,
+  bounded inbox retrieval, and explicit acknowledgement.
+- Database-backed integration coverage for the CLI, MCP transports, identity,
+  message lifecycle, provider behavior, and abuse controls.
+- A restricted hosted Streamable HTTP MCP demo with isolated synthetic
+  mailboxes and real outbound delivery disabled.
+
+## Architecture
+
+```text
+ChatGPT / Codex / another MCP client
+              |
+              v
+       Shoot Email MCP
+              |
+              v
+   Cloudflare backend Worker ---- Hyperdrive ---- Neon Postgres
+              |
+       +------+------+
+       |             |
+       v             v
+Email Sending   inbound webhook
+                       ^
+                       |
+             Cloudflare Email Worker
+                       ^
+                       |
+                Email Routing
+```
+
+The production path uses Cloudflare for DNS, routing, edge processing, and
+outbound delivery, while Neon stores identities, sessions, messages, delivery
+state, and future embeddings. The hosted judge demo exercises the real remote
+MCP and database path but deliberately uses the mock provider and disables
+outbound delivery.
+
+## Hosted Demo
+
+The judge demo is available at:
+
+```text
+https://shoot-email-backend.powersurge.workers.dev/mcp
+```
+
+Each judge receives an isolated synthetic mailbox containing eight recognizable
+messages, including one with hostile instructions for testing prompt-injection
+handling. The bearer secret is supplied privately with the submission. See
+[`docs/hackathon/TESTING.md`](docs/hackathon/TESTING.md) for the exact setup,
+black-box prompts, and security boundary.
+
+## Supported Platforms
+
+- The hosted MCP works with clients that support Streamable HTTP MCP and bearer
+  tokens, including Codex.
+- Local CLI and MCP development are tested with Node.js, npm, Docker Desktop,
+  and a POSIX-compatible shell on macOS.
+- The application code is portable to Linux, but the documented local workflow
+  has not yet been independently tested on Linux or Windows.
 
 ## Setup
 
