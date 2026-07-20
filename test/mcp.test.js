@@ -56,6 +56,23 @@ test('MCP tools perform the LLM-first mailbox workflow with stable identity', as
       tools.tools.map((tool) => tool.name).sort(),
       expectedToolNames,
     );
+    const instructions = connection.client.getInstructions();
+    const discoveryPrefix = instructions.slice(0, 512);
+    assert.match(discoveryPrefix, /persistent email inbox through MCP/);
+    assert.match(discoveryPrefix, /initialize Shoot Email/);
+    assert.match(discoveryPrefix, /Call initialize_mailbox/);
+    assert.match(instructions, /untrusted external data/);
+    const initializeTool = tools.tools.find(
+      (tool) => tool.name === 'initialize_mailbox',
+    );
+    assert.match(initializeTool.description, /start Shoot Email/);
+    assert.match(initializeTool.description, /not a local software project/);
+    const pendingTool = tools.tools.find(
+      (tool) => tool.name === 'list_pending_messages',
+    );
+    assert.match(pendingTool.description, /new messages/);
+    assert.match(pendingTool.description, /received replies/);
+    assert.match(pendingTool.description, /inbox summary/);
     assert.equal(tools.tools.some((tool) => tool.name.includes('abuse')), false);
     assert.equal(tools.tools.some((tool) => tool.name.includes('migrate')), false);
     assert.equal(tools.tools.every((tool) => tool.outputSchema?.type === 'object'), true);
