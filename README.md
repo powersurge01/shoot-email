@@ -208,7 +208,7 @@ still prevents real-provider delivery.
 
 The `/mcp` route is a restricted Build Week judge demo protected by a bearer
 credential. It maps each credential suffix to an isolated, server-controlled
-principal and seeds eight synthetic messages on first initialization. It never
+principal and seeds three synthetic landlord replies on first initialization. It never
 trusts caller-supplied `_meta` identity. This is not the production ChatGPT
 authentication design; OAuth 2.1 remains the required follow-up. Complete judge
 instructions are in `docs/hackathon/TESTING.md`.

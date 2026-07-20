@@ -29,7 +29,8 @@ baseline checkpoint. It adds:
 - A stateless Streamable HTTP MCP endpoint for Cloudflare Workers.
 - Bearer authentication that resolves a server-controlled request principal.
 - Per-credential isolated demo mailboxes that ignore spoofed `_meta` identity.
-- Automatic one-time seeding of eight synthetic, recognizable inbound emails.
+- Automatic one-time seeding of three synthetic landlord replies for the
+  apartment-hunting demo.
 - A deliberate prompt-injection email demonstrating that message content is
   untrusted data.
 - Worker-level auth and protocol tests plus database-backed identity and seeding

@@ -444,20 +444,26 @@ test('new hackathon demo principals receive an isolated synthetic inbox once', a
       arguments: {},
     });
     assertSuccess(inbox);
-    assert.equal(inbox.structuredContent.messages.length, 8);
+    assert.equal(inbox.structuredContent.messages.length, 3);
     assert.deepEqual(
       inbox.structuredContent.messages.map((message) => message.subject),
       [
-        'Launch checklist needs final review',
-        'Customer feedback: export workflow',
-        'Invoice INV-2048 due Friday',
-        'Agenda for product review',
-        'Resolved: unusual webhook retry volume',
-        'Weekly mailbox operations summary',
-        'Re: Integration test complete',
-        'Untrusted email content example',
+        'Re: Tour request: Launch in Alameda',
+        'Re: Tour request: 930 Pacific Avenue, Unit 4D',
+        'Re: Tour request: Alameda Park Apartments',
       ],
     );
+    assert.deepEqual(
+      inbox.structuredContent.messages.map((message) => message.from),
+      [
+        'launch-leasing@example.com',
+        'pacific-manager@example.org',
+        'alameda-park-leasing@example.net',
+      ],
+    );
+    assert.match(inbox.structuredContent.messages[0].text, /Saturday, July 25 at 11:00 AM/);
+    assert.match(inbox.structuredContent.messages[1].text, /Sunday, July 26 at 10:30 AM/);
+    assert.match(inbox.structuredContent.messages[2].text, /whether you have any pets/);
 
     const sendAttempt = await connection.client.callTool({
       name: 'send_text_email',
