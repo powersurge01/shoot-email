@@ -26,6 +26,41 @@ try {
     name: 'shoot_email.check_inbox',
     arguments: {},
   });
+  let simulatedSend = null;
+  if (process.env.REMOTE_MCP_SMOKE_SEND === 'true') {
+    const requestId = crypto.randomUUID();
+    const send = await client.callTool({
+      name: 'send_text_email',
+      arguments: {
+        requestId,
+        to: 'demo-recipient@example.com',
+        subject: 'MailBridge remote MCP smoke test',
+        text: 'This is a simulated message. No external email should be delivered.',
+      },
+    });
+    const replay = await client.callTool({
+      name: 'send_text_email',
+      arguments: {
+        requestId,
+        to: 'demo-recipient@example.com',
+        subject: 'MailBridge remote MCP smoke test',
+        text: 'This is a simulated message. No external email should be delivered.',
+      },
+    });
+    const outboundStatus = await client.callTool({
+      name: 'get_outbound_message_status',
+      arguments: { lookupBy: 'requestId', id: requestId },
+    });
+    simulatedSend = {
+      ok: send.structuredContent?.ok === true,
+      simulated: send.structuredContent?.simulated === true,
+      provider: send.structuredContent?.message?.provider,
+      providerCalled: send.structuredContent?.providerCalled,
+      replayed: replay.structuredContent?.idempotentReplay === true,
+      replayProviderCalled: replay.structuredContent?.providerCalled,
+      status: outboundStatus.structuredContent?.message?.deliveryStatus,
+    };
+  }
   console.log(JSON.stringify({
     ok: initialized.structuredContent?.ok === true
       && status.structuredContent?.ok === true
@@ -37,6 +72,7 @@ try {
     outboundEnabled: status.structuredContent?.outbound?.enabled,
     pendingCount: inbox.structuredContent?.messages?.length,
     subjects: inbox.structuredContent?.messages?.map((message) => message.subject),
+    simulatedSend,
   }, null, 2));
 } finally {
   await client.close();

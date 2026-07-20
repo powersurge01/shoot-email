@@ -426,6 +426,14 @@ test('new hackathon demo principals receive an isolated synthetic inbox once', a
       name: 'shoot_email.initialize_mailbox',
       arguments: {},
     }));
+
+    const status = await connection.client.callTool({
+      name: 'get_service_status',
+      arguments: {},
+    });
+    assertSuccess(status);
+    assert.equal(status.structuredContent.provider.mode, 'simulation');
+    assert.equal(status.structuredContent.outbound.available, true);
     assertSuccess(await connection.client.callTool({
       name: 'shoot_email.initialize_mailbox',
       arguments: {},
@@ -456,12 +464,41 @@ test('new hackathon demo principals receive an isolated synthetic inbox once', a
       arguments: {
         requestId: 'a0000000-0000-4000-8000-000000000099',
         to: 'recipient@example.com',
-        subject: 'Demo must not send',
-        text: 'This must be rejected before any provider call.',
+        subject: 'Simulated demo send',
+        text: 'This must use the mock provider and never contact the recipient.',
       },
     });
-    assert.equal(sendAttempt.isError, true);
-    assert.equal(sendAttempt.structuredContent.error.code, 'demo_outbound_disabled');
+    assertSuccess(sendAttempt);
+    assert.equal(sendAttempt.structuredContent.ok, true);
+    assert.equal(sendAttempt.structuredContent.providerCalled, true);
+    assert.equal(sendAttempt.structuredContent.simulated, true);
+    assert.equal(sendAttempt.structuredContent.message.provider, 'mock');
+    assert.equal(sendAttempt.structuredContent.message.simulated, true);
+    assert.match(
+      sendAttempt.structuredContent.message.providerMessageId,
+      /^mock-/,
+    );
+
+    const previousProvider = process.env.MAIL_PROVIDER;
+    process.env.MAIL_PROVIDER = 'cloudflare';
+    try {
+      const realSendAttempt = await connection.client.callTool({
+        name: 'send_text_email',
+        arguments: {
+          requestId: 'a0000000-0000-4000-8000-000000000100',
+          to: 'recipient@example.com',
+          subject: 'Real demo send must be blocked',
+          text: 'This must be rejected before a real provider can be called.',
+        },
+      });
+      assert.equal(realSendAttempt.isError, true);
+      assert.equal(
+        realSendAttempt.structuredContent.error.code,
+        'demo_real_outbound_disabled',
+      );
+    } finally {
+      process.env.MAIL_PROVIDER = previousProvider;
+    }
   } finally {
     await connection.close();
   }

@@ -13,6 +13,7 @@
 		"SHOOT_EMAIL_ENV": "staging",
 		"INBOUND_DOMAIN": "yoyowza.com",
 		"MAIL_PROVIDER": "mock",
+		// Demo sends are simulated; this remains false for every real provider.
 		"OUTBOUND_SENDING_ENABLED": "false",
 		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false",
 		"ENABLE_REMOTE_MCP_DEMO": "true",

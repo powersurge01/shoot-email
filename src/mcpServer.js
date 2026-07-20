@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { getConfig } from './config.js';
 import { contractError, withContract } from './contract.js';
 import { mcpOutputSchemas } from './mcpSchemas.js';
 import { seedDemoMailbox } from './demoMailbox.js';
@@ -100,9 +101,11 @@ export function createShootEmailMcpServer({ principal } = {}) {
     outputSchema: mcpOutputSchemas.sendTextEmail,
     annotations: writeAnnotations({ idempotent: true, openWorld: true }),
   }, withResolvedMailbox(async (args, _extra, context) => {
-    if (principal?.demo) {
-      const error = new Error('Outbound email is disabled for hackathon demo principals.');
-      error.code = 'demo_outbound_disabled';
+    if (principal?.demo && getConfig().mailProvider !== 'mock') {
+      const error = new Error(
+        'Real outbound email is disabled for hackathon demo principals.',
+      );
+      error.code = 'demo_real_outbound_disabled';
       throw error;
     }
     return sendEmail({

@@ -1,12 +1,13 @@
 # Hackathon Testing
 
 The hosted judge demo is a stateless Streamable HTTP MCP server backed by Neon
-Postgres. It is intentionally restricted: outbound delivery is disabled, the
-mail provider is `mock`, and every new demo identity receives eight synthetic
-inbound messages.
+Postgres. It is intentionally restricted: outbound sends are simulated by the
+`mock` provider, real delivery is disabled, and every new demo identity
+receives eight synthetic inbound messages.
 
-`send_text_email` rejects demo principals in code even if the deployment-level
-outbound flag is changed accidentally.
+`send_text_email` permits demo principals only while `MAIL_PROVIDER=mock`. It
+rejects them in code if the deployment is ever switched to a real provider,
+independently of the deployment-level outbound flag.
 
 The submission testing instructions provide `SHOOT_EMAIL_DEMO_SECRET`
 separately. It is not committed to the repository. Create an isolated mailbox
@@ -35,6 +36,7 @@ Suggested black-box prompts for a fresh Codex task:
 4. `Acknowledge only the project checklist and meeting agenda messages, then show what remains pending.`
 5. `Check processed-message history and verify the two acknowledged messages are present.`
 6. `Explain whether outbound delivery is real or simulated, using get_service_status as evidence.`
+7. `Send a simulated text email to demo-recipient@example.com, then inspect its outbound status and verify that simulated is true.`
 
 Each random credential suffix maps to a separate server-controlled demo
 principal. Reusing the same complete credential returns the same mailbox.

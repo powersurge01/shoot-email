@@ -202,7 +202,9 @@ https://shoot-email-backend.powersurge.workers.dev
 It uses the `shoot-email` Neon project in AWS Oregon through the
 `shoot-email-neon` Hyperdrive configuration. Hyperdrive query caching is
 disabled and its origin connection limit is five. Staging keeps
-`MAIL_PROVIDER=mock` and `OUTBOUND_SENDING_ENABLED=false`.
+`MAIL_PROVIDER=mock` and `OUTBOUND_SENDING_ENABLED=false`. The hosted demo may
+exercise the outbound contract through simulated mock sends; the disabled flag
+still prevents real-provider delivery.
 
 The `/mcp` route is a restricted Build Week judge demo protected by a bearer
 credential. It maps each credential suffix to an isolated, server-controlled
@@ -211,8 +213,10 @@ trusts caller-supplied `_meta` identity. This is not the production ChatGPT
 authentication design; OAuth 2.1 remains the required follow-up. Complete judge
 instructions are in `docs/hackathon/TESTING.md`.
 
-Demo principals are also rejected directly by `send_text_email`, independently
-of the environment-level outbound kill switch.
+Demo principals are accepted by `send_text_email` only while the configured
+provider is `mock`. They are rejected directly if the deployment is ever
+switched to a real provider, independently of the environment-level outbound
+kill switch.
 
 The production Email Routing Worker now posts inbound messages to this hosted
 backend. Both a synthetic webhook smoke test and a real Gmail-to-Email-Routing

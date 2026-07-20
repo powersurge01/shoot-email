@@ -467,6 +467,8 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
       && config.cloudflareApiToken
       && (config.cloudflareFromEmail || user.email_alias),
   );
+  const outboundEnabled = provider.isTestProvider === true
+    || config.outboundAbuse.enabled;
 
   return {
     ok: true,
@@ -484,8 +486,8 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
       configured: providerConfigured,
     },
     outbound: {
-      enabled: config.outboundAbuse.enabled,
-      available: config.outboundAbuse.enabled
+      enabled: outboundEnabled,
+      available: outboundEnabled
         && user.sending_status === 'active'
         && providerConfigured,
       abuseControlsEnforced: provider.isTestProvider !== true,
