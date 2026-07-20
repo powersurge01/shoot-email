@@ -640,16 +640,16 @@ npm run smoke:remote-mcp
 The hosted demo keeps real outbound delivery disabled. See
 `docs/hackathon/TESTING.md` for judge prompts and the security boundary.
 
-## Built With Codex
+## Built With Codex and GPT-5.6 Sol
 
-Codex was used as the engineering collaborator throughout the project: reading
-and testing the repository, researching current provider and Apps SDK behavior,
-implementing migrations and service boundaries, deploying Cloudflare Workers,
-and running black-box CLI and MCP evaluations. Product decisions remained
-explicitly user-directed, including the LLM-first inbox semantics,
-acknowledgement lifecycle, Cloudflare-first architecture, abuse limits, and the
-choice to ship a restricted hackathon transport before the OAuth production
-milestone.
+Codex with GPT-5.6 Sol was used as the engineering collaborator throughout the
+Build Week extension: reading and testing the repository, researching current
+provider and Apps SDK behavior, implementing the remote MCP transport,
+deploying Cloudflare Workers, and running black-box CLI and MCP evaluations.
+Product decisions remained explicitly user-directed, including the LLM-first
+inbox semantics, acknowledgement lifecycle, Cloudflare-first architecture,
+abuse limits, and the choice to ship a restricted hackathon transport before
+the OAuth production milestone.
 
 Codex accelerated repetitive verification and cross-layer changes, especially
 the database-backed contract tests, Cloudflare/Neon deployment checks, and the
@@ -658,10 +658,20 @@ submission is that the demo bearer credential produces a request principal
 outside tool arguments; replacing it with OAuth later does not require rewriting
 the mailbox service or MCP tool contracts.
 
+GPT-5.6 Sol also acts as the email agent in the demonstration. It turns an
+apartment-hunting goal into multiple idempotent MCP send operations, retrieves
+the simulated landlord replies as untrusted external data, compares their
+availability, and proposes a conflict-free tour schedule. The model supplies
+reasoning and tool orchestration; Shoot Email supplies durable identity,
+delivery, message state, and retry guarantees.
+
 Because this project predates Build Week, `docs/hackathon/BUILD_LOG.md` clearly
 separates the pre-existing baseline from the work added for the submission. The
 two preserved black-box transcripts also show how fresh Codex sessions exposed
 contract problems that were then hardened in code.
+
+The judge-facing narrative and Devpost field draft are in
+[`docs/hackathon/SUBMISSION.md`](docs/hackathon/SUBMISSION.md).
 
 ## Tests
 

@@ -31,8 +31,8 @@ baseline checkpoint. It adds:
 - Per-credential isolated demo mailboxes that ignore spoofed `_meta` identity.
 - Automatic one-time seeding of three synthetic landlord replies for the
   apartment-hunting demo.
-- A deliberate prompt-injection email demonstrating that message content is
-  untrusted data.
+- Simulated outbound sends that exercise the production-shaped idempotency
+  contract without exposing the shared sending domain to judge traffic.
 - Worker-level auth and protocol tests plus database-backed identity and seeding
   tests.
 - Judge instructions, a hosted demo, and a documented OAuth 2.1 production
@@ -43,10 +43,18 @@ The resulting hackathon demo release is version `0.2.0`.
 Commit timestamps and the branch diff from `7701077` provide the authoritative
 record of work added during the submission period.
 
-## Codex evidence
+## Codex and GPT-5.6 evidence
 
 The repository records product decisions in `AGENTS.md` and preserves prior
-black-box sessions listed above. The Devpost submission must also include the
-actual `/feedback` Codex Session ID for the task where the majority of the
-hackathon extension was built. Record the model shown by Codex in the
-submission materials; do not infer or substitute a model name in this file.
+black-box sessions listed above.
+
+- Primary Codex `/feedback` Session ID:
+  `019f3f17-7a7f-7c01-87e6-4506263733ad`
+- Model used for the primary Build Week work: GPT-5.6 Sol
+
+Codex with GPT-5.6 Sol was used to inspect the pre-existing system, research
+current platform behavior, make cross-layer implementation changes, run tests,
+deploy the hosted Worker, and iterate from fresh-session black-box feedback.
+GPT-5.6 Sol is also used as the agent in the video demonstration: it plans the
+apartment inquiry workflow, calls the Shoot Email MCP tools, evaluates the
+synthetic landlord replies, and recommends a tour schedule.
