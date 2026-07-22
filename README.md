@@ -664,9 +664,12 @@ https://shoot-email-auth-staging.powersurge.workers.dev/.well-known/oauth-protec
 The resource exposes `mailbox:read`, `mailbox:send`, and
 `mailbox:acknowledge`. Auth0 Client ID Metadata Document registration and its
 resource-parameter compatibility profile are enabled for MCP client
-compatibility. Real outbound delivery remains disabled in this staging Worker.
-The design and security decisions are recorded in
-`docs/adr/002-auth0-oauth-remote-mcp.md`.
+compatibility. Strict Dynamic Client Registration supports Codex's public PKCE
+client, and Google login has been verified to preserve one mailbox across fresh
+Codex processes. Real outbound delivery remains disabled in this staging
+Worker. The design and security decisions are recorded in
+`docs/adr/002-auth0-oauth-remote-mcp.md`; repeatable test instructions are in
+`docs/oauth/TESTING.md`.
 
 Build or deploy this isolated Worker with:
 

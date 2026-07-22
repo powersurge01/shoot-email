@@ -65,6 +65,14 @@ metadata, support MCP's `resource` parameter, and keep real outbound delivery
 disabled until interactive client authorization has passed end-to-end testing.
 See `docs/adr/002-auth0-oauth-remote-mcp.md`.
 
+Codex uses strict Dynamic Client Registration plus Authorization Code with PKCE
+and refresh tokens. Keep the default third-party user grant limited to the three
+mailbox scopes, require user consent, and promote only intentionally supported
+Auth0 login connections to domain level. Do not configure `oauth_resource` in a
+Codex client when protected-resource discovery already advertises the same URI;
+duplicate `resource` parameters are rejected by Auth0. Current verification
+steps are in `docs/oauth/TESTING.md`.
+
 ## Identity And Addresses
 
 Anonymous users can receive a stable generated email alias tied to a user ID.

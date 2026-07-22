@@ -151,7 +151,12 @@ export function remoteMcpOAuthUnauthorizedResponse(request, error = 'invalid_tok
   }, {
     status: 401,
     headers: {
-      'WWW-Authenticate': `Bearer resource_metadata="${metadataUrl}", error="${error}"`,
+      'WWW-Authenticate': [
+        'Bearer',
+        `resource_metadata="${metadataUrl}"`,
+        `scope="${OAUTH_SCOPES.join(' ')}"`,
+        `error="${error}"`,
+      ].join(', '),
     },
   });
 }

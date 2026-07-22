@@ -34,10 +34,13 @@ resource metadata at both discovery paths:
 /.well-known/oauth-protected-resource/mcp
 ```
 
-The Auth0 tenant has Client ID Metadata Document registration enabled and uses
-the `compatibility` resource-parameter profile. This lets MCP clients present a
-metadata-document URL as their client ID and lets Auth0 interpret the OAuth
-`resource` parameter as the API audience when `audience` is absent.
+The Auth0 tenant has Client ID Metadata Document registration enabled, strict
+Dynamic Client Registration enabled, and uses the `compatibility`
+resource-parameter profile. Codex currently uses DCR, Authorization Code with
+PKCE, and refresh tokens. A default user-delegated third-party grant limits DCR
+clients to the three Shoot Email scopes, and users must authenticate and consent.
+The compatibility profile lets Auth0 interpret the OAuth `resource` parameter
+as the API audience when `audience` is absent.
 
 The initial scopes are:
 
@@ -64,9 +67,8 @@ database or returned through MCP.
 - The Worker remains stateless and stores no Auth0 client secret.
 - Existing OpenAI Apps, local CLI, and judge-demo identities continue to use
   the same internal user and mailbox services without sharing identity keys.
-- Client registration compatibility still needs an end-to-end test with the
-  target ChatGPT or Codex OAuth client. Auth0 Client ID Metadata Document and
-  resource-parameter settings may need tenant-level configuration for that
-  client.
+- Codex interactive OAuth has been verified end to end with a strict dynamically
+  registered client, Google login, user consent, stored credentials, and stable
+  mailbox identity across fresh Codex processes.
 - Real outbound delivery remains disabled in OAuth staging until authentication
   and abuse-control tests pass.

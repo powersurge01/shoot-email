@@ -142,6 +142,10 @@ test('OAuth deployment challenges missing tokens before database access', async 
     response.headers.get('www-authenticate'),
     /resource_metadata="https:\/\/backend\.example\/\.well-known\/oauth-protected-resource"/,
   );
+  assert.match(
+    response.headers.get('www-authenticate'),
+    /scope="mailbox:read mailbox:send mailbox:acknowledge"/,
+  );
 });
 
 test('Auth0 JWT validation derives a trusted principal and scopes', async () => {
