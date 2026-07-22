@@ -7,8 +7,8 @@ import { seedDemoMailbox } from './demoMailbox.js';
 import { normalizeOpenAiAppsContext } from './openAiAppsContext.js';
 import {
   acknowledgeMessages,
-  findOpenAiContext,
-  findOrCreateOpenAiContext,
+  findExternalContext,
+  findOrCreateExternalContext,
   getOutboundStatus,
   getSenderIdentity,
   getServiceStatus,
@@ -53,8 +53,8 @@ export function createShootEmailMcpServer({ principal } = {}) {
     outputSchema: mcpOutputSchemas.initializeMailbox,
     annotations: writeAnnotations({ idempotent: true, openWorld: false }),
   }, async (_args, extra) => {
-    const context = readOpenAiContext(extra, principal);
-    const resolved = await findOrCreateOpenAiContext(context);
+    const context = readExternalContext(extra, principal);
+    const resolved = await findOrCreateExternalContext(context);
     if (principal?.demo && resolved.userCreated) {
       await seedDemoMailbox(resolved.user.email_alias);
     }
@@ -209,11 +209,11 @@ function register(server, name, config, handler) {
 
 function withMailbox(handler, principal) {
   return async (args, extra) => {
-    const identity = readOpenAiContext(extra, principal);
-    const context = await findOpenAiContext(identity);
+    const identity = readExternalContext(extra, principal);
+    const context = await findExternalContext(identity);
     if (!context) {
       const error = new Error(
-        'No mailbox exists for this OpenAI subject. Call shoot_email.initialize_mailbox first.',
+        'No mailbox exists for this authenticated identity. Call shoot_email.initialize_mailbox first.',
       );
       error.code = 'mailbox_not_initialized';
       throw error;
@@ -222,7 +222,7 @@ function withMailbox(handler, principal) {
   };
 }
 
-function readOpenAiContext(extra = {}, principal) {
+function readExternalContext(extra = {}, principal) {
   if (principal) {
     if (!principal.subject) {
       const error = new Error('Trusted request principal is missing a subject.');
@@ -230,6 +230,7 @@ function readOpenAiContext(extra = {}, principal) {
       throw error;
     }
     return {
+      provider: principal.provider || 'openai_apps',
       subject: principal.subject,
       session: principal.session || null,
       organization: principal.organization || null,
@@ -237,12 +238,13 @@ function readOpenAiContext(extra = {}, principal) {
   }
 
   const context = normalizeOpenAiAppsContext({ _meta: extra._meta });
-  if (context.subject) return context;
+  if (context.subject) return { provider: 'openai_apps', ...context };
 
   const allowDevelopmentIdentity = process.env.NODE_ENV === 'test'
     || process.env.MCP_ALLOW_DEV_IDENTITY === 'true';
   if (allowDevelopmentIdentity && process.env.MCP_DEV_OPENAI_SUBJECT) {
     return {
+      provider: 'openai_apps',
       subject: process.env.MCP_DEV_OPENAI_SUBJECT,
       session: process.env.MCP_DEV_OPENAI_SESSION || null,
       organization: process.env.MCP_DEV_OPENAI_ORGANIZATION || null,

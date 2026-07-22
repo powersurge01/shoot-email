@@ -8,8 +8,11 @@ import {
 } from '../../../src/httpHandlers.js';
 import {
   authorizeRemoteMcpDemo,
+  authorizeRemoteMcpOAuth,
   handleRemoteMcpRequest,
+  oauthProtectedResourceMetadata,
   remoteMcpMisconfiguredResponse,
+  remoteMcpOAuthUnauthorizedResponse,
   remoteMcpUnauthorizedResponse,
 } from '../../../src/remoteMcp.js';
 
@@ -28,9 +31,19 @@ export async function handleBackendRequest(request, env, options = {}) {
     return jsonResponse(getHealthResponse(env.SHOOT_EMAIL_ENV));
   }
 
+  if (request.method === 'GET' && isProtectedResourceMetadataPath(url.pathname)) {
+    const metadata = oauthProtectedResourceMetadata(request, env);
+    return metadata
+      ? Response.json(metadata)
+      : jsonResponse({ status: 404, body: { ok: false, error: 'Not found.' } });
+  }
+
   let remoteMcpAuthorization;
   if (url.pathname === '/mcp') {
-    remoteMcpAuthorization = await authorizeRemoteMcpDemo(request, env);
+    const oauthAuthorization = await authorizeRemoteMcpOAuth(request, env);
+    remoteMcpAuthorization = oauthAuthorization.enabled
+      ? oauthAuthorization
+      : await authorizeRemoteMcpDemo(request, env);
     if (!remoteMcpAuthorization.enabled) {
       return jsonResponse({ status: 404, body: { ok: false, error: 'Not found.' } });
     }
@@ -38,7 +51,9 @@ export async function handleBackendRequest(request, env, options = {}) {
       return remoteMcpMisconfiguredResponse();
     }
     if (!remoteMcpAuthorization.authorized) {
-      return remoteMcpUnauthorizedResponse();
+      return oauthAuthorization.enabled
+        ? remoteMcpOAuthUnauthorizedResponse(request)
+        : remoteMcpUnauthorizedResponse();
     }
     if (request.method !== 'POST') {
       return Response.json({
@@ -73,7 +88,15 @@ export async function handleBackendRequest(request, env, options = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/mcp') {
-        return handleRemoteMcpRequest(request, remoteMcpAuthorization.principal);
+        return handleRemoteMcpRequest(request, {
+          principal: remoteMcpAuthorization.principal,
+          scopes: remoteMcpAuthorization.scopes || ['mailbox:read', 'mailbox:send', 'mailbox:acknowledge'],
+          authInfo: remoteMcpAuthorization.authInfo || {
+            token: 'redacted',
+            clientId: 'shoot-email-hackathon-demo',
+            scopes: ['mailbox:demo'],
+          },
+        });
       }
 
       if (request.method === 'POST' && url.pathname === '/webhooks/email/inbound') {
@@ -119,6 +142,11 @@ export async function handleBackendRequest(request, env, options = {}) {
       await database.close();
     }
   }
+}
+
+function isProtectedResourceMetadataPath(pathname) {
+  return pathname === '/.well-known/oauth-protected-resource'
+    || pathname === '/.well-known/oauth-protected-resource/mcp';
 }
 
 function isDatabaseRoute(method, pathname) {

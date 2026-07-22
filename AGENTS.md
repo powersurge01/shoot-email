@@ -55,6 +55,16 @@ the mock provider, simulated outbound sends, and a disabled real-delivery kill
 switch. The complete
 rationale is recorded in `docs/adr/001-cloudflare-workers-neon-hyperdrive.md`.
 
+The post-hackathon remote MCP authentication path uses Auth0 as the managed
+OAuth authorization server and a separate `shoot-email-auth-staging` Worker as
+the resource server. Validate RS256 access tokens through Auth0 JWKS and enforce
+issuer, audience, expiration, and operation scopes on every request. Derive the
+external identity only from validated `sub` and optional `org_id` claims, using
+an Auth0 tenant-specific provider namespace. Publish RFC 9728 protected resource
+metadata, support MCP's `resource` parameter, and keep real outbound delivery
+disabled until interactive client authorization has passed end-to-end testing.
+See `docs/adr/002-auth0-oauth-remote-mcp.md`.
+
 ## Identity And Addresses
 
 Anonymous users can receive a stable generated email alias tied to a user ID.

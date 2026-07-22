@@ -212,12 +212,12 @@ disabled and its origin connection limit is five. Staging keeps
 exercise the outbound contract through simulated mock sends; the disabled flag
 still prevents real-provider delivery.
 
-The `/mcp` route is a restricted Build Week judge demo protected by a bearer
-credential. It maps each credential suffix to an isolated, server-controlled
-principal and seeds three synthetic landlord replies on first initialization. It never
-trusts caller-supplied `_meta` identity. This is not the production ChatGPT
-authentication design; OAuth 2.1 remains the required follow-up. Complete judge
-instructions are in `docs/hackathon/TESTING.md`.
+The `/mcp` route on this Worker is a restricted Build Week judge demo protected
+by a bearer credential. It maps each credential suffix to an isolated,
+server-controlled principal and seeds three synthetic landlord replies on first
+initialization. It never trusts caller-supplied `_meta` identity. This is not
+the production ChatGPT authentication design. Complete judge instructions are
+in `docs/hackathon/TESTING.md`.
 
 Demo principals are accepted by `send_text_email` only while the configured
 provider is `mock`. They are rejected directly if the deployment is ever
@@ -611,11 +611,12 @@ that it is not a snapshot. Acknowledgement responses include `allSucceeded`,
 requested and successful counts, and per-ID outcomes so partial success cannot
 be mistaken for complete success.
 
-For ChatGPT, identity comes from request metadata keys `openai/subject`,
-`openai/session`, and optionally `openai/organization`; callers cannot provide
-identity as tool arguments. A future remote MCP deployment must authenticate
-the ChatGPT connection before trusting that metadata. The development fallback
-is only for local stdio clients that do not supply ChatGPT Apps metadata.
+For local and Apps SDK connections, identity comes from request metadata keys
+`openai/subject`, `openai/session`, and optionally `openai/organization`;
+callers cannot provide identity as tool arguments. The Auth0 remote transport
+instead derives its trusted identity from validated token `sub` and optional
+`org_id` claims. The development fallback is only for local stdio clients that
+do not supply ChatGPT Apps metadata.
 
 ## Remote MCP Demo
 
@@ -639,6 +640,40 @@ npm run smoke:remote-mcp
 
 The hosted demo keeps real outbound delivery disabled. See
 `docs/hackathon/TESTING.md` for judge prompts and the security boundary.
+
+## Auth0 OAuth Staging
+
+Post-hackathon OAuth work is deployed separately so the submitted judge endpoint
+does not change:
+
+```text
+https://shoot-email-auth-staging.powersurge.workers.dev/mcp
+```
+
+This Worker is an OAuth resource server backed by Auth0. It validates RS256
+access tokens against the Auth0 JWKS endpoint, including issuer, audience,
+expiration, and scopes. It derives mailbox identity from the validated `sub`
+claim and never accepts identity through MCP tool arguments.
+
+Protected resource metadata is available at:
+
+```text
+https://shoot-email-auth-staging.powersurge.workers.dev/.well-known/oauth-protected-resource
+```
+
+The resource exposes `mailbox:read`, `mailbox:send`, and
+`mailbox:acknowledge`. Auth0 Client ID Metadata Document registration and its
+resource-parameter compatibility profile are enabled for MCP client
+compatibility. Real outbound delivery remains disabled in this staging Worker.
+The design and security decisions are recorded in
+`docs/adr/002-auth0-oauth-remote-mcp.md`.
+
+Build or deploy this isolated Worker with:
+
+```bash
+npm run backend:oauth:build
+npm run backend:oauth:deploy
+```
 
 ## Built With Codex and GPT-5.6 Sol
 

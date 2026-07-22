@@ -583,11 +583,21 @@ export async function findOrCreateOpenAiContext({
   session,
   organization,
 }) {
-  if (!subject) {
-    throw new Error('OpenAI subject is required to resolve an app user.');
-  }
+  return findOrCreateExternalContext({
+    provider: 'openai_apps',
+    subject,
+    session,
+    organization,
+  });
+}
 
-  const provider = 'openai_apps';
+export async function findOrCreateExternalContext({
+  provider,
+  subject,
+  session,
+  organization,
+}) {
+  validateExternalIdentity({ provider, subject });
   let userCreated = false;
   let user = await findUserByIdentity({
     provider,
@@ -629,14 +639,21 @@ export async function findOpenAiContext({
   session,
   organization,
 }) {
-  if (!subject) {
-    throw requestError(
-      'missing_openai_subject',
-      'OpenAI subject is required to resolve an app user.',
-    );
-  }
+  return findExternalContext({
+    provider: 'openai_apps',
+    subject,
+    session,
+    organization,
+  });
+}
 
-  const provider = 'openai_apps';
+export async function findExternalContext({
+  provider,
+  subject,
+  session,
+  organization,
+}) {
+  validateExternalIdentity({ provider, subject });
   const user = await findUserByIdentity({
     provider,
     providerSubject: subject,
@@ -659,6 +676,21 @@ export async function findOpenAiContext({
     : null;
 
   return { user, chatSession, userCreated: false };
+}
+
+function validateExternalIdentity({ provider, subject }) {
+  if (typeof provider !== 'string' || !provider.trim()) {
+    throw requestError(
+      'missing_identity_provider',
+      'An identity provider is required to resolve an external user.',
+    );
+  }
+  if (typeof subject !== 'string' || !subject.trim()) {
+    throw requestError(
+      'missing_identity_subject',
+      'An external subject is required to resolve an app user.',
+    );
+  }
 }
 
 function generateAlias() {

@@ -16,6 +16,8 @@
     "backend:dev": "wrangler dev --config workers/backend/wrangler.jsonc",
     "backend:deploy": "wrangler deploy --config workers/backend/wrangler.jsonc",
     "backend:build": "wrangler deploy --dry-run --config workers/backend/wrangler.jsonc",
+    "backend:oauth:deploy": "wrangler deploy --config workers/backend/wrangler.oauth-staging.jsonc",
+    "backend:oauth:build": "wrangler deploy --dry-run --config workers/backend/wrangler.oauth-staging.jsonc",
     "smoke:hosted": "node src/smokeHosted.js",
     "smoke:remote-mcp": "node src/smokeRemoteMcp.js",
     "test": "npm run test:unit && npm run test:integration",
@@ -27,6 +29,7 @@
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "jose": "^6.2.4",
     "pg": "^8.16.3",
     "zod": "^4.4.3"
   },

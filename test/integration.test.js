@@ -20,6 +20,7 @@ const { resetDatabase } = await import('../src/resetDb.js');
 const {
   acknowledgeMessages,
   clearSenderDisplayName,
+  findOrCreateExternalContext,
   findOrCreateOpenAiContext,
   getAbuseStatus,
   getOutboundStatus,
@@ -883,6 +884,39 @@ test('OpenAI subject and session map to stable user and chat session rows', asyn
 
   assert.equal(identityRows.rows[0].count, 1);
   assert.equal(sessionRows.rows[0].count, 2);
+});
+
+test('Auth0 and OpenAI subjects remain distinct external identity namespaces', async () => {
+  const auth0First = await findOrCreateExternalContext({
+    provider: 'auth0:tenant.example.auth0.com',
+    subject: 'shared-subject',
+    session: null,
+    organization: null,
+  });
+  const auth0Second = await findOrCreateExternalContext({
+    provider: 'auth0:tenant.example.auth0.com',
+    subject: 'shared-subject',
+    session: null,
+    organization: null,
+  });
+  const openAi = await findOrCreateOpenAiContext({
+    subject: 'shared-subject',
+    session: null,
+    organization: null,
+  });
+
+  assert.equal(auth0Second.user.id, auth0First.user.id);
+  assert.notEqual(openAi.user.id, auth0First.user.id);
+  const identities = await query(
+    'SELECT provider, provider_subject FROM user_identities ORDER BY provider',
+  );
+  assert.deepEqual(identities.rows, [
+    {
+      provider: 'auth0:tenant.example.auth0.com',
+      provider_subject: 'shared-subject',
+    },
+    { provider: 'openai_apps', provider_subject: 'shared-subject' },
+  ]);
 });
 
 test('OpenAI Apps context endpoint accepts _meta and reuses identity/session rows', async () => {

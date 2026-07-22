@@ -1,0 +1,29 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "shoot-email-auth-staging",
+	"main": "src/index.js",
+	"compatibility_date": "2026-07-19",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"SHOOT_EMAIL_ENV": "staging",
+		"INBOUND_DOMAIN": "yoyowza.com",
+		"MAIL_PROVIDER": "mock",
+		"OUTBOUND_SENDING_ENABLED": "false",
+		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false",
+		"ENABLE_REMOTE_MCP_DEMO": "false",
+		"ENABLE_REMOTE_MCP_OAUTH": "true",
+		"AUTH0_ISSUER": "https://dev-3ltbe81kduigsjty.us.auth0.com/",
+		"AUTH0_AUDIENCE": "https://shoot-email-auth-staging.powersurge.workers.dev/mcp"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "07a22c35bbfa4aeda71a7505f75506d0"
+		}
+	]
+}
