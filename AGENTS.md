@@ -73,6 +73,16 @@ Codex client when protected-resource discovery already advertises the same URI;
 duplicate `resource` parameters are rejected by Auth0. Current verification
 steps are in `docs/oauth/TESTING.md`.
 
+Production OAuth branding uses a dedicated Shoot Email Google OAuth client,
+Auth0 tenant branding, and the public identity pages at
+`https://shoot-email.yoyowza.com`. Google is an identity provider only; never
+request Gmail, Contacts, Drive, or other Google application scopes for mailbox
+authentication. Keep provider credentials in local or deployment secrets, not
+in repository configuration. Open Dynamic Client Registration remains an
+availability boundary: monitor tenant application capacity and remove only
+confirmed abandoned `tpc_` clients while the corresponding MCP client is logged
+out. See `docs/oauth/PRODUCTION_BRANDING.md`.
+
 ## Identity And Addresses
 
 Anonymous users can receive a stable generated email alias tied to a user ID.

@@ -1,0 +1,15 @@
+{
+	"$schema": "../../../node_modules/wrangler/config-schema.json",
+	"name": "shoot-email-site",
+	"compatibility_date": "2026-07-26",
+	"assets": {
+		"directory": "./public",
+		"not_found_handling": "404-page"
+	},
+	"routes": [
+		{
+			"pattern": "shoot-email.yoyowza.com",
+			"custom_domain": true
+		}
+	]
+}

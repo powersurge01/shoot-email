@@ -1,5 +1,11 @@
 # Auth0 OAuth Staging Test
 
+For deterministic testing with multiple Google accounts in Safari and for DCR
+client cleanup guidance, see
+[`SAFARI_ACCOUNT_ISOLATION.md`](./SAFARI_ACCOUNT_ISOLATION.md).
+The public identity URLs and branded provider configuration are recorded in
+[`PRODUCTION_BRANDING.md`](./PRODUCTION_BRANDING.md).
+
 ## Endpoint
 
 ```text
@@ -18,6 +24,8 @@ The staging tenant uses:
 - A default user-delegated third-party grant limited to `mailbox:read`,
   `mailbox:send`, and `mailbox:acknowledge` for the Shoot Email API.
 - Google as the current domain-level login connection.
+- A dedicated Shoot Email Google OAuth client rather than Auth0 development
+  credentials.
 - The `compatibility` resource-parameter profile.
 - One-hour RS256 access tokens validated through Auth0 JWKS.
 
@@ -101,3 +109,9 @@ The initial 2026-07-21 staging run verified:
 - `mailbox:read` and `mailbox:acknowledge` calls succeeded.
 - `mailbox:send` accepted a simulated mock-provider message after Codex write-tool
   approval; no external email was delivered.
+
+The 2026-07-26 production-branding run additionally verified the dedicated
+Google OAuth client, Shoot Email tenant branding and consent descriptions, one
+clean DCR registration, and recovery of the existing mailbox through a fresh
+authenticated Codex process. See
+[`PRODUCTION_BRANDING.md`](./PRODUCTION_BRANDING.md).

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Shoot Email gives AI agents a persistent email inbox for sending messages, receiving replies, and maintaining conversation history."
+    >
+    <title>Shoot Email | Email built for AI agents</title>
+    <link rel="icon" href="/assets/shoot-email-logo-512.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          <img src="/assets/shoot-email-logo-512.png" alt="">
+          <span>Shoot Email</span>
+        </a>
+        <div class="nav-links">
+          <a href="#how-it-works">How it works</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="https://github.com/powersurge01/shoot-email">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-content">
+          <p class="eyebrow">Persistent email for AI agents</p>
+          <h1>Shoot Email</h1>
+          <p class="hero-copy">
+            Give an AI agent a real inbox. Send plain-text email, receive
+            replies, preserve conversation history, and continue real-world
+            communication through an MCP interface.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="https://github.com/powersurge01/shoot-email">
+              View source
+            </a>
+            <a class="button button-secondary" href="#data-use">
+              How sign-in data is used
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section">
+        <div class="container">
+          <h2>Email designed for agent workflows</h2>
+          <p class="section-intro">
+            Shoot Email is an open-source, terminal-first service and MCP
+            server. Its contracts prioritize structured context retrieval,
+            idempotent sends, explicit acknowledgement, and safe retries.
+          </p>
+          <div class="feature-grid">
+            <article class="feature">
+              <h3>Persistent identity</h3>
+              <p>
+                Each authenticated user receives a stable mailbox that remains
+                available across agent sessions.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Send and receive</h3>
+              <p>
+                Agents can send plain-text messages and retrieve complete
+                inbound replies through bounded, structured tool calls.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Controlled processing</h3>
+              <p>
+                Retrieval and acknowledgement are separate, so failed agent
+                runs do not silently lose messages.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="data-use" class="section section-alt">
+        <div class="container">
+          <h2>Google is used only for authentication</h2>
+          <p class="section-intro">
+            Signing in with Google lets Auth0 verify who you are. Shoot Email
+            requests basic identity information for login; it does not request
+            access to Gmail messages, contacts, Drive files, or other Google
+            application data.
+          </p>
+          <p class="data-note">
+            Email content handled by Shoot Email comes from messages sent
+            through the Shoot Email service, not from a user's existing Gmail
+            mailbox. See the <a href="/privacy">privacy policy</a> for the data
+            model and service limitations.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-content">
+        <span>Shoot Email</span>
+        <div class="footer-links">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="https://github.com/powersurge01/shoot-email/issues">Contact</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

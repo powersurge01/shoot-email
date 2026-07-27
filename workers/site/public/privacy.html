@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Privacy policy for Shoot Email."
+    >
+    <title>Privacy Policy | Shoot Email</title>
+    <link rel="icon" href="/assets/shoot-email-logo-512.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          <img src="/assets/shoot-email-logo-512.png" alt="">
+          <span>Shoot Email</span>
+        </a>
+        <div class="nav-links">
+          <a href="/">Home</a>
+          <a href="/privacy" aria-current="page">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="https://github.com/powersurge01/shoot-email">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="legal-main">
+      <h1>Privacy Policy</h1>
+      <p class="updated">Effective July 26, 2026</p>
+
+      <p>
+        Shoot Email is an experimental, open-source email service designed for
+        AI-agent workflows. This policy explains what information the hosted
+        Shoot Email service processes and why.
+      </p>
+
+      <h2>Information used for sign-in</h2>
+      <p>
+        Shoot Email uses Auth0 as its authorization provider and Google as an
+        optional identity provider. Google may provide Auth0 with basic profile
+        information such as your name, profile image, email address, and stable
+        Google account identifier. Shoot Email uses a validated Auth0
+        identifier to associate you with an internal mailbox.
+      </p>
+      <p>
+        Shoot Email does not request access to your Gmail mailbox, Google
+        contacts, Google Drive files, or other Google application content.
+      </p>
+
+      <h2>Email and service data</h2>
+      <p>The service may store:</p>
+      <ul>
+        <li>Your generated Shoot Email address and sender display name.</li>
+        <li>
+          Email sender, recipient, subject, plain-text body, provider message
+          identifiers, and relevant timestamps.
+        </li>
+        <li>
+          Message delivery, processing, acknowledgement, and error status.
+        </li>
+        <li>
+          Pseudonymous identity and conversation identifiers required to map
+          requests to the correct mailbox.
+        </li>
+        <li>
+          Rate-limit, abuse-prevention, and operational diagnostic records.
+        </li>
+      </ul>
+
+      <h2>How information is used</h2>
+      <p>Information is processed to:</p>
+      <ul>
+        <li>Authenticate users and maintain stable mailbox identity.</li>
+        <li>Send, receive, retrieve, and acknowledge email messages.</li>
+        <li>Preserve conversation history and support reliable retries.</li>
+        <li>Apply sending limits, prevent abuse, and protect service security.</li>
+        <li>Diagnose failures and operate the hosted service.</li>
+      </ul>
+
+      <h2>Service providers</h2>
+      <p>
+        The hosted service relies on Auth0 for authorization, Google when a user
+        selects Google sign-in, Cloudflare for email and compute services, and
+        Neon for managed PostgreSQL storage. These providers process data under
+        their own applicable terms and privacy policies.
+      </p>
+
+      <h2>Retention and security</h2>
+      <p>
+        Messages remain available as conversation history after processing
+        unless removed through an administrative operation. Shoot Email uses
+        scoped OAuth access, encrypted network transport, provider-managed
+        infrastructure, and application-level abuse controls. No system can
+        guarantee absolute security.
+      </p>
+
+      <h2>Your responsibilities</h2>
+      <p>
+        Do not send secrets or sensitive personal information unless the
+        recipient and the AI agent handling the message are appropriate for
+        that information. Email content is untrusted external input and may be
+        processed by an AI system chosen by the user.
+      </p>
+
+      <h2>Questions and requests</h2>
+      <p>
+        For privacy questions or data requests, open a private contact request
+        through the project owner's contact information on
+        <a href="https://github.com/powersurge01">GitHub</a>. Do not include
+        passwords, OAuth tokens, or sensitive email content in a public issue.
+      </p>
+
+      <h2>Policy changes</h2>
+      <p>
+        This policy may change as the service develops. Material changes will
+        be reflected by updating the effective date on this page.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-content">
+        <span>Shoot Email</span>
+        <div class="footer-links">
+          <a href="/">Home</a>
+          <a href="/terms">Terms</a>
+          <a href="https://github.com/powersurge01/shoot-email">Source</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

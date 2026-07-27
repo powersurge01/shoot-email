@@ -671,6 +671,14 @@ Worker. The design and security decisions are recorded in
 `docs/adr/002-auth0-oauth-remote-mcp.md`; repeatable test instructions are in
 `docs/oauth/TESTING.md`.
 
+Production-facing identity information is published at
+[shoot-email.yoyowza.com](https://shoot-email.yoyowza.com), with separate
+[privacy](https://shoot-email.yoyowza.com/privacy) and
+[terms](https://shoot-email.yoyowza.com/terms) pages. The Auth0 and Google
+branding configuration, verification checklist, and DCR operational boundary
+are documented in
+[`docs/oauth/PRODUCTION_BRANDING.md`](docs/oauth/PRODUCTION_BRANDING.md).
+
 Build or deploy this isolated Worker with:
 
 ```bash
