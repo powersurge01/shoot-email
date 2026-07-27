@@ -104,8 +104,7 @@ a:hover {
   position: absolute;
   z-index: -2;
   inset: 0;
-  background: url("/assets/shoot-email-ai-assistant-mockup.png") center / cover
-    no-repeat;
+  background: url("/assets/shoot-email-hero-ai-inbox.png") center / cover no-repeat;
   content: "";
 }
 
@@ -113,7 +112,7 @@ a:hover {
   position: absolute;
   z-index: -1;
   inset: 0;
-  background: rgb(5 7 13 / 66%);
+  background: rgb(5 7 13 / 24%);
   content: "";
 }
 
@@ -311,6 +310,14 @@ h1 {
 
   .hero {
     min-height: 600px;
+  }
+
+  .hero::before {
+    background-position: 66% center;
+  }
+
+  .hero::after {
+    background: rgb(5 7 13 / 58%);
   }
 
   .hero-content {
