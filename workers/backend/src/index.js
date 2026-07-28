@@ -91,6 +91,10 @@ export async function handleBackendRequest(request, env, options = {}) {
         return handleRemoteMcpRequest(request, {
           principal: remoteMcpAuthorization.principal,
           scopes: remoteMcpAuthorization.scopes || ['mailbox:read', 'mailbox:send', 'mailbox:acknowledge'],
+          outboundPolicy: remoteMcpAuthorization.outboundPolicy || {
+            mode: 'disabled',
+            allowed: remoteMcpAuthorization.principal?.demo === true,
+          },
           authInfo: remoteMcpAuthorization.authInfo || {
             token: 'redacted',
             clientId: 'shoot-email-hackathon-demo',

@@ -1,30 +1,39 @@
 {
 	"$schema": "../../node_modules/wrangler/config-schema.json",
-	"name": "shoot-email-auth-staging",
+	"name": "shoot-email-production",
 	"main": "src/index.js",
-	"compatibility_date": "2026-07-19",
+	"compatibility_date": "2026-07-27",
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"workers_dev": false,
 	"observability": {
 		"enabled": true
 	},
+	"routes": [
+		{
+			"pattern": "mcp.shoot-email.yoyowza.com",
+			"custom_domain": true
+		}
+	],
 	"vars": {
-		"SHOOT_EMAIL_ENV": "staging",
+		"SHOOT_EMAIL_ENV": "production",
 		"INBOUND_DOMAIN": "yoyowza.com",
-		"MAIL_PROVIDER": "mock",
+		"MAIL_PROVIDER": "cloudflare",
 		"OUTBOUND_SENDING_ENABLED": "false",
 		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false",
 		"ENABLE_REMOTE_MCP_DEMO": "false",
 		"ENABLE_REMOTE_MCP_OAUTH": "true",
 		"AUTH0_ISSUER": "https://dev-3ltbe81kduigsjty.us.auth0.com/",
-		"AUTH0_AUDIENCE": "https://shoot-email-auth-staging.powersurge.workers.dev/mcp",
-		"OAUTH_OUTBOUND_ROLLOUT_MODE": "open"
+		"AUTH0_AUDIENCE": "https://mcp.shoot-email.yoyowza.com/mcp",
+		"OAUTH_OUTBOUND_ROLLOUT_MODE": "allowlist",
+		"OUTBOUND_GLOBAL_HOURLY_LIMIT": "20",
+		"OUTBOUND_GLOBAL_DAILY_LIMIT": "100"
 	},
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
-			"id": "07a22c35bbfa4aeda71a7505f75506d0"
+			"id": "c7b619a814514612a6823f183fd1ff50"
 		}
 	]
 }

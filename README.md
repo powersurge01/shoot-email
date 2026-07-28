@@ -224,9 +224,9 @@ provider is `mock`. They are rejected directly if the deployment is ever
 switched to a real provider, independently of the environment-level outbound
 kill switch.
 
-The production Email Routing Worker now posts inbound messages to this hosted
-backend. Both a synthetic webhook smoke test and a real Gmail-to-Email-Routing
-test have passed. The latter stored and acknowledged the marker
+The current Email Routing Worker posts inbound messages to this hosted backend.
+Both a synthetic webhook smoke test and a real Gmail-to-Email-Routing test have
+passed. The latter stored and acknowledged the marker
 `HOSTED-ROUTING-001` in Neon.
 
 Run the hosted synthetic smoke test with a direct Neon migration connection:
@@ -685,6 +685,38 @@ Build or deploy this isolated Worker with:
 npm run backend:oauth:build
 npm run backend:oauth:deploy
 ```
+
+## Authenticated Production Deployment
+
+The controlled production Worker is deployed at:
+
+```text
+https://mcp.shoot-email.yoyowza.com/mcp
+```
+
+It uses the clean `shoot_email_production` Neon database through the dedicated
+`shoot-email-neon-production` Hyperdrive configuration. It does not share data
+with the hackathon demo or OAuth staging deployments.
+
+Production uses Cloudflare Email Sending code, but real delivery remains behind
+two independent rollout controls:
+
+- `OUTBOUND_SENDING_ENABLED=false` is the global provider kill switch.
+- `OAUTH_OUTBOUND_ROLLOUT_MODE=allowlist` permits `send_text_email` only for
+  validated Auth0 subjects stored in the
+  `OAUTH_OUTBOUND_ALLOWED_SUBJECTS` Worker secret.
+
+Build, deploy, and verify the unauthenticated production surface with:
+
+```bash
+npm run backend:production:build
+npm run backend:production:deploy
+npm run smoke:production
+```
+
+The complete provisioning, inbound cutover, real-delivery acceptance, and
+rollback process is in
+[`docs/operations/PRODUCTION_CUTOVER.md`](docs/operations/PRODUCTION_CUTOVER.md).
 
 ## Built With Codex and GPT-5.6 Sol
 

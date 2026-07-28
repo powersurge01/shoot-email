@@ -65,6 +65,16 @@ metadata, support MCP's `resource` parameter, and keep real outbound delivery
 disabled until interactive client authorization has passed end-to-end testing.
 See `docs/adr/002-auth0-oauth-remote-mcp.md`.
 
+The authenticated production deployment must use its own Neon database and
+Hyperdrive configuration; do not point production at either the hackathon demo
+or OAuth staging database. Keep the production OAuth transport on a stable
+custom hostname. During rollout, require both the global outbound kill switch
+and a default-deny allowlist derived only from the validated Auth0 `sub` claim.
+Never accept an allowlist identity through MCP tool arguments. Cut over inbound
+routing before enabling provider sends, then enable real delivery only for an
+allowlisted acceptance account. The operational sequence and rollback steps
+are recorded in `docs/operations/PRODUCTION_CUTOVER.md`.
+
 Codex uses strict Dynamic Client Registration plus Authorization Code with PKCE
 and refresh tokens. Keep the default third-party user grant limited to the three
 mailbox scopes, require user consent, and promote only intentionally supported

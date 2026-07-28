@@ -23,6 +23,7 @@ const oauthEnv = {
   ENABLE_REMOTE_MCP_OAUTH: 'true',
   AUTH0_ISSUER: 'https://tenant.example.auth0.com/',
   AUTH0_AUDIENCE: 'https://oauth-backend.example/mcp',
+  OAUTH_OUTBOUND_ROLLOUT_MODE: 'open',
 };
 
 test('remote MCP route is hidden when the demo is disabled', async () => {
@@ -175,6 +176,7 @@ test('Auth0 JWT validation derives a trusted principal and scopes', async () => 
   );
   assert.equal(result.authorized, true);
   assert.deepEqual(result.scopes, ['mailbox:read', 'mailbox:send']);
+  assert.deepEqual(result.outboundPolicy, { mode: 'open', allowed: true });
   assert.deepEqual(result.principal, {
     provider: 'auth0:tenant.example.auth0.com',
     subject: 'auth0|user-123',
@@ -205,6 +207,7 @@ test('OAuth scope checks reject send and acknowledgement before tool execution',
       {
         principal: { provider: 'auth0:test', subject: 'subject-1' },
         scopes: ['mailbox:read'],
+        outboundPolicy: { mode: 'open', allowed: true },
         authInfo: { token: 'redacted', clientId: 'test', scopes: ['mailbox:read'] },
       },
     );
@@ -212,6 +215,74 @@ test('OAuth scope checks reject send and acknowledgement before tool execution',
     assert.equal((await response.json()).error.data.requiredScope, requiredScope);
     assert.match(response.headers.get('www-authenticate'), /insufficient_scope/);
   }
+});
+
+test('OAuth outbound rollout defaults closed and supports an exact subject allowlist', async () => {
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const jwk = await exportJWK(publicKey);
+  jwk.kid = 'oauth-rollout-key';
+  jwk.use = 'sig';
+  jwk.alg = 'RS256';
+  const jwks = createLocalJWKSet({ keys: [jwk] });
+  const token = await new SignJWT({
+    scope: 'mailbox:read mailbox:send',
+    client_id: 'test-client',
+  })
+    .setProtectedHeader({ alg: 'RS256', kid: jwk.kid, typ: 'at+jwt' })
+    .setIssuer(oauthEnv.AUTH0_ISSUER)
+    .setAudience(oauthEnv.AUTH0_AUDIENCE)
+    .setSubject('google-oauth2|allowed-user')
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(privateKey);
+
+  const closed = await authorizeRemoteMcpOAuth(
+    mcpRequest(initializeRequest(), token),
+    {
+      ...oauthEnv,
+      OAUTH_OUTBOUND_ROLLOUT_MODE: undefined,
+    },
+    { jwks },
+  );
+  assert.deepEqual(closed.outboundPolicy, { mode: 'disabled', allowed: false });
+
+  const allowed = await authorizeRemoteMcpOAuth(
+    mcpRequest(initializeRequest(), token),
+    {
+      ...oauthEnv,
+      OAUTH_OUTBOUND_ROLLOUT_MODE: 'allowlist',
+      OAUTH_OUTBOUND_ALLOWED_SUBJECTS: [
+        'google-oauth2|other-user',
+        'google-oauth2|allowed-user',
+      ].join(','),
+    },
+    { jwks },
+  );
+  assert.deepEqual(allowed.outboundPolicy, { mode: 'allowlist', allowed: true });
+
+  const denied = await handleRemoteMcpRequest(
+    mcpRequest({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'send_text_email', arguments: {} },
+    }),
+    {
+      principal: closed.principal,
+      scopes: ['mailbox:read', 'mailbox:send'],
+      outboundPolicy: closed.outboundPolicy,
+      authInfo: {
+        token: 'redacted',
+        clientId: 'test',
+        scopes: ['mailbox:read', 'mailbox:send'],
+      },
+    },
+  );
+  assert.equal(denied.status, 403);
+  assert.deepEqual((await denied.json()).error.data, {
+    reason: 'outbound_rollout_not_allowed',
+    rolloutMode: 'disabled',
+  });
 });
 
 function initializeRequest() {

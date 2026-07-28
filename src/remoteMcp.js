@@ -4,6 +4,7 @@ import { createShootEmailMcpServer } from './mcpServer.js';
 
 const MAX_MCP_BODY_BYTES = 1_000_000;
 const OAUTH_SCOPES = ['mailbox:read', 'mailbox:send', 'mailbox:acknowledge'];
+const OAUTH_OUTBOUND_ROLLOUT_MODES = new Set(['disabled', 'allowlist', 'open']);
 const jwksByUrl = new Map();
 
 export async function authorizeRemoteMcpDemo(request, env) {
@@ -44,7 +45,8 @@ export async function authorizeRemoteMcpOAuth(request, env, options = {}) {
 
   const issuer = normalizeIssuer(env.AUTH0_ISSUER);
   const audience = env.AUTH0_AUDIENCE?.trim();
-  if (!issuer || !audience) {
+  const rolloutMode = env.OAUTH_OUTBOUND_ROLLOUT_MODE?.trim() || 'disabled';
+  if (!issuer || !audience || !OAUTH_OUTBOUND_ROLLOUT_MODES.has(rolloutMode)) {
     return { enabled: true, configured: false, authorized: false };
   }
 
@@ -70,11 +72,17 @@ export async function authorizeRemoteMcpOAuth(request, env, options = {}) {
     }
 
     const scopes = readTokenScopes(payload);
+    const outboundPolicy = getOutboundRolloutPolicy(
+      rolloutMode,
+      env.OAUTH_OUTBOUND_ALLOWED_SUBJECTS,
+      payload.sub,
+    );
     return {
       enabled: true,
       configured: true,
       authorized: true,
       scopes,
+      outboundPolicy,
       principal: {
         provider: `auth0:${new URL(issuer).host}`,
         subject: payload.sub,
@@ -99,6 +107,14 @@ export async function handleRemoteMcpRequest(request, authorization) {
   const missingScope = findMissingScope(parsedBody, authorization.scopes);
   if (missingScope) {
     return remoteMcpForbiddenResponse(request, missingScope);
+  }
+  if (
+    callsTool(parsedBody, 'send_text_email')
+    && authorization.outboundPolicy?.allowed !== true
+  ) {
+    return remoteMcpOutboundRolloutForbiddenResponse(
+      authorization.outboundPolicy?.mode || 'disabled',
+    );
   }
 
   const server = createShootEmailMcpServer({ principal: authorization.principal });
@@ -179,10 +195,25 @@ export function remoteMcpForbiddenResponse(request, requiredScope) {
   });
 }
 
+export function remoteMcpOutboundRolloutForbiddenResponse(mode) {
+  return Response.json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32004,
+      message: 'Outbound email is not enabled for this OAuth identity.',
+      data: {
+        reason: 'outbound_rollout_not_allowed',
+        rolloutMode: mode,
+      },
+    },
+    id: null,
+  }, { status: 403 });
+}
+
 export function remoteMcpMisconfiguredResponse() {
   return Response.json({
     jsonrpc: '2.0',
-    error: { code: -32002, message: 'Remote MCP demo authentication is not configured.' },
+    error: { code: -32002, message: 'Remote MCP authentication is not configured.' },
     id: null,
   }, { status: 503 });
 }
@@ -232,6 +263,30 @@ function findMissingScope(body, scopes = []) {
     }
   }
   return [...required].find((scope) => !available.has(scope)) || null;
+}
+
+function callsTool(body, toolName) {
+  const requests = Array.isArray(body) ? body : [body];
+  return requests.some(
+    (entry) => entry?.method === 'tools/call' && entry.params?.name === toolName,
+  );
+}
+
+function getOutboundRolloutPolicy(mode, configuredSubjects, subject) {
+  if (mode === 'open') {
+    return { mode, allowed: true };
+  }
+  if (mode === 'disabled') {
+    return { mode, allowed: false };
+  }
+
+  const allowedSubjects = new Set(
+    String(configuredSubjects || '')
+      .split(/[\n,]/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  return { mode, allowed: allowedSubjects.has(subject) };
 }
 
 function constantTimeEqual(left, right) {

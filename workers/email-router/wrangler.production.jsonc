@@ -1,0 +1,9 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "shoot-email-router",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-27",
+  "vars": {
+    "BACKEND_INBOUND_WEBHOOK_URL": "https://mcp.shoot-email.yoyowza.com/webhooks/email/inbound"
+  }
+}
