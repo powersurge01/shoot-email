@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { getConfig } from './config.js';
 
+const PROVIDER_TIMEOUT_MS = 30_000;
+
 export function createMailProvider() {
   const config = getConfig();
 
@@ -77,6 +79,7 @@ export class CloudflareMailProvider {
             Authorization: `Bearer ${this.config.cloudflareApiToken}`,
             'Content-Type': 'application/json',
           },
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
           body: JSON.stringify({
             from: sender.name
               ? { address: sender.email, name: sender.name }

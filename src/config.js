@@ -1,36 +1,43 @@
 import dotenv from 'dotenv';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 dotenv.config({ quiet: true });
+
+const environmentStorage = new AsyncLocalStorage();
+
+export function runWithConfigEnvironment(environment, callback) {
+  return environmentStorage.run(environment, callback);
+}
 
 export function getConfig() {
   return {
     environment: readEnvironment(),
     databaseUrl:
-      process.env.DATABASE_URL ||
+      readValue('DATABASE_URL') ||
       'postgres://shoot_email:shoot_email@localhost:5432/shoot_email',
-    inboundDomain: process.env.INBOUND_DOMAIN || 'in.localhost',
-    mailProvider: process.env.MAIL_PROVIDER || 'mock',
-    cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+    inboundDomain: readValue('INBOUND_DOMAIN') || 'in.localhost',
+    mailProvider: readValue('MAIL_PROVIDER') || 'mock',
+    cloudflareAccountId: readValue('CLOUDFLARE_ACCOUNT_ID') || '',
     cloudflareApiToken:
-      process.env.CLOUDFLARE_EMAIL_API_TOKEN
-      || process.env.CLOUDFLARE_API_TOKEN
+      readValue('CLOUDFLARE_EMAIL_API_TOKEN')
+      || readValue('CLOUDFLARE_API_TOKEN')
       || '',
-    cloudflareFromEmail: process.env.CLOUDFLARE_FROM_EMAIL || '',
-    inboundWebhookToken: process.env.INBOUND_WEBHOOK_TOKEN || '',
-    port: Number(process.env.PORT || 3000),
+    cloudflareFromEmail: readValue('CLOUDFLARE_FROM_EMAIL') || '',
+    inboundWebhookToken: readValue('INBOUND_WEBHOOK_TOKEN') || '',
+    port: Number(readValue('PORT') || 3000),
     customAliasChangeCooldownDays: parsePositiveInteger(
-      process.env.CUSTOM_ALIAS_CHANGE_COOLDOWN_DAYS,
+      readValue('CUSTOM_ALIAS_CHANGE_COOLDOWN_DAYS'),
       30,
     ),
     outboundAbuse: {
-      enabled: parseBoolean(process.env.OUTBOUND_SENDING_ENABLED, true),
+      enabled: parseBoolean(readValue('OUTBOUND_SENDING_ENABLED'), true),
       global: {
         hourlyLimit: parsePositiveInteger(
-          process.env.OUTBOUND_GLOBAL_HOURLY_LIMIT,
+          readValue('OUTBOUND_GLOBAL_HOURLY_LIMIT'),
           20,
         ),
         dailyLimit: parsePositiveInteger(
-          process.env.OUTBOUND_GLOBAL_DAILY_LIMIT,
+          readValue('OUTBOUND_GLOBAL_DAILY_LIMIT'),
           100,
         ),
       },
@@ -53,9 +60,10 @@ export function getConfig() {
 }
 
 function readEnvironment() {
-  const value = process.env.SHOOT_EMAIL_ENV
-    || (process.env.NODE_ENV === 'test' ? 'test' : null)
-    || (process.env.NODE_ENV === 'production' ? 'production' : 'development');
+  const nodeEnvironment = readValue('NODE_ENV');
+  const value = readValue('SHOOT_EMAIL_ENV')
+    || (nodeEnvironment === 'test' ? 'test' : null)
+    || (nodeEnvironment === 'production' ? 'production' : 'development');
   if (!['development', 'test', 'staging', 'production'].includes(value)) {
     throw new Error(
       `SHOOT_EMAIL_ENV must be development, test, staging, or production; received "${value}".`,
@@ -67,26 +75,31 @@ function readEnvironment() {
 function readTierLimits(tier, defaults) {
   return {
     hourlyLimit: parsePositiveInteger(
-      process.env[`OUTBOUND_${tier}_HOURLY_LIMIT`],
+      readValue(`OUTBOUND_${tier}_HOURLY_LIMIT`),
       defaults.hourlyLimit,
     ),
     dailyLimit: parsePositiveInteger(
-      process.env[`OUTBOUND_${tier}_DAILY_LIMIT`],
+      readValue(`OUTBOUND_${tier}_DAILY_LIMIT`),
       defaults.dailyLimit,
     ),
     newRecipientDailyLimit: parsePositiveInteger(
-      process.env[`OUTBOUND_${tier}_NEW_RECIPIENT_DAILY_LIMIT`],
+      readValue(`OUTBOUND_${tier}_NEW_RECIPIENT_DAILY_LIMIT`),
       defaults.newRecipientDailyLimit,
     ),
     minimumIntervalSeconds: parsePositiveInteger(
-      process.env[`OUTBOUND_${tier}_MIN_INTERVAL_SECONDS`],
+      readValue(`OUTBOUND_${tier}_MIN_INTERVAL_SECONDS`),
       defaults.minimumIntervalSeconds,
     ),
     sessionHourlyLimit: parsePositiveInteger(
-      process.env[`OUTBOUND_${tier}_SESSION_HOURLY_LIMIT`],
+      readValue(`OUTBOUND_${tier}_SESSION_HOURLY_LIMIT`),
       defaults.sessionHourlyLimit,
     ),
   };
+}
+
+function readValue(name) {
+  const requestEnvironment = environmentStorage.getStore();
+  return requestEnvironment?.[name] ?? process.env[name];
 }
 
 function parsePositiveInteger(value, fallback) {

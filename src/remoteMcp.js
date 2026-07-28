@@ -117,7 +117,11 @@ export async function handleRemoteMcpRequest(request, authorization) {
     );
   }
 
-  const server = createShootEmailMcpServer({ principal: authorization.principal });
+  const server = createShootEmailMcpServer({
+    principal: authorization.principal,
+    database: authorization.runtime?.database,
+    environment: authorization.runtime?.environment,
+  });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

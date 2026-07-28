@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getConfig } from './config.js';
+import { getConfig, runWithConfigEnvironment } from './config.js';
 import { contractError, withContract } from './contract.js';
+import { runWithDatabase } from './db.js';
 import { mcpOutputSchemas } from './mcpSchemas.js';
 import { seedDemoMailbox } from './demoMailbox.js';
 import { normalizeOpenAiAppsContext } from './openAiAppsContext.js';
@@ -20,6 +21,7 @@ import {
 } from './services.js';
 
 const emptyInput = z.object({}).strict();
+const executionContexts = new WeakMap();
 const batchInput = z.object({
   limit: z.number().int().min(1).max(200).optional(),
   maxChars: z.number().int().min(1).max(500_000).optional(),
@@ -27,7 +29,11 @@ const batchInput = z.object({
   cursor: z.string().min(1).optional(),
 }).strict();
 
-export function createShootEmailMcpServer({ principal } = {}) {
+export function createShootEmailMcpServer({
+  principal,
+  database,
+  environment,
+} = {}) {
   const server = new McpServer({
     name: 'shoot-email',
     version: '0.2.0',
@@ -43,6 +49,7 @@ export function createShootEmailMcpServer({ principal } = {}) {
       'Reuse the same requestId when retrying send_text_email after a timeout.',
     ].join(' '),
   });
+  executionContexts.set(server, { database, environment });
   const withResolvedMailbox = (handler) => withMailbox(handler, principal);
 
   register(server, 'shoot_email.initialize_mailbox', {
@@ -198,12 +205,28 @@ export function createShootEmailMcpServer({ principal } = {}) {
 
 function register(server, name, config, handler) {
   server.registerTool(name, config, async (...callbackArgs) => {
-    try {
-      const result = await handler(...callbackArgs);
-      return toMcpResult(withContract(result));
-    } catch (error) {
-      return toMcpResult(contractError(error), true);
-    }
+    const execute = async () => {
+      console.error(JSON.stringify({ event: 'mcp.tool.started', tool: name }));
+      try {
+        const result = await handler(...callbackArgs);
+        console.error(JSON.stringify({ event: 'mcp.tool.completed', tool: name }));
+        return toMcpResult(withContract(result));
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: 'mcp.tool.failed',
+          tool: name,
+          code: error.code || 'internal_error',
+        }));
+        return toMcpResult(contractError(error), true);
+      }
+    };
+    const { database, environment } = executionContexts.get(server) || {};
+    const executeWithDatabase = database
+      ? () => runWithDatabase(database, execute)
+      : execute;
+    return environment
+      ? runWithConfigEnvironment(environment, executeWithDatabase)
+      : executeWithDatabase();
   });
 }
 

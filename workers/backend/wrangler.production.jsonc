@@ -20,7 +20,7 @@
 		"SHOOT_EMAIL_ENV": "production",
 		"INBOUND_DOMAIN": "yoyowza.com",
 		"MAIL_PROVIDER": "cloudflare",
-		"OUTBOUND_SENDING_ENABLED": "false",
+		"OUTBOUND_SENDING_ENABLED": "true",
 		"ENABLE_UNAUTHENTICATED_OPENAI_CONTEXT": "false",
 		"ENABLE_REMOTE_MCP_DEMO": "false",
 		"ENABLE_REMOTE_MCP_OAUTH": "true",

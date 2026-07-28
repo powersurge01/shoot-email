@@ -93,6 +93,25 @@ subjects to the Wrangler configuration.
    OAUTH_OUTBOUND_ALLOWED_SUBJECTS
    ```
 
+   When loading the Email Sending credential from `.env`, reject an empty
+   value before updating the Worker:
+
+   ```bash
+   EMAIL_TOKEN="$(node --input-type=module -e \
+     "import 'dotenv/config'; process.stdout.write(process.env.CLOUDFLARE_EMAIL_API_TOKEN || '')")"
+   test -n "$EMAIL_TOKEN" || {
+     echo "CLOUDFLARE_EMAIL_API_TOKEN is empty" >&2
+     exit 1
+   }
+   printf '%s' "$EMAIL_TOKEN" |
+     npx wrangler secret put CLOUDFLARE_EMAIL_API_TOKEN \
+       --config workers/backend/wrangler.production.jsonc
+   unset EMAIL_TOKEN
+   ```
+
+   `CLOUDFLARE_FROM_EMAIL` may remain empty. In that case, outbound messages
+   use the user's current Shoot Email alias as the sender address.
+
 6. Deploy with `MAIL_PROVIDER=cloudflare`,
    `OUTBOUND_SENDING_ENABLED=false`, and rollout mode `allowlist`.
 7. Run:
@@ -122,6 +141,28 @@ For two different OAuth identities:
   `outbound_rollout_not_allowed`.
 
 Inspect the delivered message headers for SPF, DKIM, and DMARC pass results.
+
+## Production Acceptance Record
+
+The allowlisted production path passed its first complete acceptance test on
+2026-07-27:
+
+- OAuth mailbox: `u_978fee62@yoyowza.com`
+- Outbound request: `10ff4d51-2c64-40c3-8f2c-7a8a17dab3e0`
+- Outbound message: `3593cdc8-a862-4d52-9359-e96172167ca6`
+- Cloudflare accepted the real message as `queued`.
+- An identical retry returned `idempotentReplay: true` and
+  `providerCalled: false`.
+- Gmail delivered the message to the Inbox with SPF, both DKIM signatures, and
+  DMARC passing.
+- A Gmail reply returned through Email Routing as inbound message
+  `af6560bb-98d6-4a4b-855a-93a21548cb78`.
+- The reply remained pending across two retrievals, then disappeared from the
+  pending inbox only after explicit acknowledgement.
+
+The production OAuth rollout remains restricted to explicitly configured Auth0
+subjects. A live non-allowlisted-identity rejection and two-mailbox isolation
+check remain outstanding acceptance items.
 
 ## Emergency Rollback
 

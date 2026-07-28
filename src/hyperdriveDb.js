@@ -1,6 +1,7 @@
 import pg from 'pg';
 
 const { Client } = pg;
+const DATABASE_TIMEOUT_MS = 10_000;
 
 export function createRequestDatabase(connectionString) {
   if (!connectionString) {
@@ -13,7 +14,12 @@ export function createRequestDatabase(connectionString) {
 
   async function getClient() {
     if (!client) {
-      client = new Client({ connectionString });
+      client = new Client({
+        connectionString,
+        connectionTimeoutMillis: DATABASE_TIMEOUT_MS,
+        query_timeout: DATABASE_TIMEOUT_MS,
+        statement_timeout: DATABASE_TIMEOUT_MS,
+      });
       connecting = client.connect();
     }
     await connecting;

@@ -146,10 +146,12 @@ export async function sendEmail({
   chatSessionId,
   mailProvider,
 }) {
+  console.error(JSON.stringify({ event: 'outbound.validation.started' }));
   validateOutboundRequest({ requestId, toEmail, subject, textBody });
   const normalizedRecipient = toEmail.trim().toLowerCase();
 
   const user = await resolveUser(userId);
+  console.error(JSON.stringify({ event: 'outbound.user.resolved' }));
   const config = getConfig();
   const provider = mailProvider || createMailProvider();
   const requestedSender = {
@@ -159,6 +161,7 @@ export async function sendEmail({
   const sender = provider.resolveSender
     ? provider.resolveSender(requestedSender)
     : { email: requestedSender.fromEmail, name: requestedSender.fromName };
+  console.error(JSON.stringify({ event: 'outbound.reservation.started' }));
   const reservation = await reserveOutboundMessage({
     userId: user.id,
     chatSessionId,
@@ -172,6 +175,11 @@ export async function sendEmail({
     abusePolicy: config.outboundAbuse,
     enforceAbuseControls: provider.isTestProvider !== true,
   });
+  console.error(JSON.stringify({
+    event: 'outbound.reservation.completed',
+    created: reservation.created,
+    rejected: reservation.rejected === true,
+  }));
 
   if (!reservation.created) {
     const matchesOriginal = outboundContentMatches(reservation.message, {
@@ -200,6 +208,7 @@ export async function sendEmail({
   }
 
   try {
+    console.error(JSON.stringify({ event: 'outbound.provider.started' }));
     const sent = await provider.send({
       fromEmail: sender.email,
       fromName: sender.name,
@@ -207,6 +216,7 @@ export async function sendEmail({
       subject,
       textBody,
     });
+    console.error(JSON.stringify({ event: 'outbound.provider.completed' }));
 
     const message = await completeOutboundMessage({
       userId: user.id,

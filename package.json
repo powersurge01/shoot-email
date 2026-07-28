@@ -29,7 +29,7 @@
     "smoke:remote-mcp": "node src/smokeRemoteMcp.js",
     "smoke:production": "node src/smokeProduction.js",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js test/remoteMcp.test.js",
+    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/config.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js test/remoteMcp.test.js",
     "test:integration": "node src/runIntegrationTests.js"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { runWithConfigEnvironment } from '../../../src/config.js';
 import { runWithDatabase } from '../../../src/db.js';
 import { createRequestDatabase } from '../../../src/hyperdriveDb.js';
 import {
@@ -25,6 +26,12 @@ export default {
 };
 
 export async function handleBackendRequest(request, env, options = {}) {
+  return runWithConfigEnvironment(env, () => (
+    handleBackendRequestWithEnvironment(request, env, options)
+  ));
+}
+
+async function handleBackendRequestWithEnvironment(request, env, options) {
   const url = new URL(request.url);
 
   if (request.method === 'GET' && url.pathname === '/health') {
@@ -99,6 +106,10 @@ export async function handleBackendRequest(request, env, options = {}) {
             token: 'redacted',
             clientId: 'shoot-email-hackathon-demo',
             scopes: ['mailbox:demo'],
+          },
+          runtime: {
+            database,
+            environment: env,
           },
         });
       }
