@@ -265,7 +265,15 @@ test('OAuth outbound rollout defaults closed and supports an exact subject allow
       jsonrpc: '2.0',
       id: 4,
       method: 'tools/call',
-      params: { name: 'send_text_email', arguments: {} },
+      params: {
+        name: 'send_text_email',
+        arguments: {
+          requestId: 'a0000000-0000-4000-8000-000000000004',
+          to: 'recipient@example.com',
+          subject: 'Rollout denial',
+          text: 'This must be rejected before mailbox or database access.',
+        },
+      },
     }),
     {
       principal: closed.principal,
@@ -278,10 +286,17 @@ test('OAuth outbound rollout defaults closed and supports an exact subject allow
       },
     },
   );
-  assert.equal(denied.status, 403);
-  assert.deepEqual((await denied.json()).error.data, {
-    reason: 'outbound_rollout_not_allowed',
-    rolloutMode: 'disabled',
+  assert.equal(denied.status, 200);
+  const deniedBody = await denied.json();
+  assert.equal(deniedBody.result.isError, true);
+  assert.deepEqual(deniedBody.result.structuredContent, {
+    contractVersion: '2.0',
+    ok: false,
+    error: {
+      code: 'outbound_rollout_not_allowed',
+      message: 'Outbound email is not enabled for this authenticated identity.',
+      retryable: false,
+    },
   });
 });
 

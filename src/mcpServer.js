@@ -33,6 +33,7 @@ export function createShootEmailMcpServer({
   principal,
   database,
   environment,
+  outboundPolicy,
 } = {}) {
   const server = new McpServer({
     name: 'shoot-email',
@@ -107,23 +108,26 @@ export function createShootEmailMcpServer({
     }).strict(),
     outputSchema: mcpOutputSchemas.sendTextEmail,
     annotations: writeAnnotations({ idempotent: true, openWorld: true }),
-  }, withResolvedMailbox(async (args, _extra, context) => {
-    if (principal?.demo && getConfig().mailProvider !== 'mock') {
-      const error = new Error(
-        'Real outbound email is disabled for hackathon demo principals.',
-      );
-      error.code = 'demo_real_outbound_disabled';
-      throw error;
-    }
-    return sendEmail({
-      userId: context.user.id,
-      chatSessionId: context.chatSession?.id,
-      requestId: args.requestId,
-      toEmail: args.to,
-      subject: args.subject,
-      textBody: args.text,
-    });
-  }));
+  }, enforceOutboundPolicy(
+    outboundPolicy,
+    withResolvedMailbox(async (args, _extra, context) => {
+      if (principal?.demo && getConfig().mailProvider !== 'mock') {
+        const error = new Error(
+          'Real outbound email is disabled for hackathon demo principals.',
+        );
+        error.code = 'demo_real_outbound_disabled';
+        throw error;
+      }
+      return sendEmail({
+        userId: context.user.id,
+        chatSessionId: context.chatSession?.id,
+        requestId: args.requestId,
+        toEmail: args.to,
+        subject: args.subject,
+        textBody: args.text,
+      });
+    }),
+  ));
 
   register(server, 'shoot_email.check_inbox', {
     title: 'Check Shoot Email inbox',
@@ -242,6 +246,19 @@ function withMailbox(handler, principal) {
       throw error;
     }
     return handler(args, extra, context);
+  };
+}
+
+function enforceOutboundPolicy(outboundPolicy, handler) {
+  return async (...args) => {
+    if (outboundPolicy && outboundPolicy.allowed !== true) {
+      const error = new Error(
+        'Outbound email is not enabled for this authenticated identity.',
+      );
+      error.code = 'outbound_rollout_not_allowed';
+      throw error;
+    }
+    return handler(...args);
   };
 }
 

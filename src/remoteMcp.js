@@ -108,19 +108,12 @@ export async function handleRemoteMcpRequest(request, authorization) {
   if (missingScope) {
     return remoteMcpForbiddenResponse(request, missingScope);
   }
-  if (
-    callsTool(parsedBody, 'send_text_email')
-    && authorization.outboundPolicy?.allowed !== true
-  ) {
-    return remoteMcpOutboundRolloutForbiddenResponse(
-      authorization.outboundPolicy?.mode || 'disabled',
-    );
-  }
 
   const server = createShootEmailMcpServer({
     principal: authorization.principal,
     database: authorization.runtime?.database,
     environment: authorization.runtime?.environment,
+    outboundPolicy: authorization.outboundPolicy,
   });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -199,21 +192,6 @@ export function remoteMcpForbiddenResponse(request, requiredScope) {
   });
 }
 
-export function remoteMcpOutboundRolloutForbiddenResponse(mode) {
-  return Response.json({
-    jsonrpc: '2.0',
-    error: {
-      code: -32004,
-      message: 'Outbound email is not enabled for this OAuth identity.',
-      data: {
-        reason: 'outbound_rollout_not_allowed',
-        rolloutMode: mode,
-      },
-    },
-    id: null,
-  }, { status: 403 });
-}
-
 export function remoteMcpMisconfiguredResponse() {
   return Response.json({
     jsonrpc: '2.0',
@@ -267,13 +245,6 @@ function findMissingScope(body, scopes = []) {
     }
   }
   return [...required].find((scope) => !available.has(scope)) || null;
-}
-
-function callsTool(body, toolName) {
-  const requests = Array.isArray(body) ? body : [body];
-  return requests.some(
-    (entry) => entry?.method === 'tools/call' && entry.params?.name === toolName,
-  );
 }
 
 function getOutboundRolloutPolicy(mode, configuredSubjects, subject) {

@@ -48,9 +48,14 @@ Before starting:
 Run the login command exactly once:
 
 ```bash
-codex mcp login shoot-email-oauth \
+codex mcp login shoot-email-production \
   --scopes mailbox:read,mailbox:send,mailbox:acknowledge
 ```
+
+Use `shoot-email-oauth` instead only when deliberately testing the staging
+Worker. Confirm the selected connection with `get_service_status`: production
+must report `environment: production`, `provider.mode: production`, and
+`simulated: false`.
 
 Safari opens links from external applications in the most recently used
 profile. Complete the entire Google and Auth0 flow in that same profile. Before
@@ -66,7 +71,7 @@ advertises the resource URI, and sending it again results in duplicate
 To switch from Account A to Account B:
 
 ```bash
-codex mcp logout shoot-email-oauth
+codex mcp logout shoot-email-production
 ```
 
 Then:
@@ -97,6 +102,9 @@ After logging in with a profile, open a fresh Codex task and use:
 Use shoot-email-oauth to initialize my Shoot Email mailbox. Show its address
 and whether it was newly created.
 ```
+
+For production acceptance, replace `shoot-email-oauth` with
+`shoot-email-production`.
 
 Expected behavior:
 
@@ -137,8 +145,9 @@ Only delete test DCR clients when Codex is logged out:
 codex mcp list
 ```
 
-The `shoot-email-oauth` row must report `Not logged in`. Deleting the active
-client can invalidate a working refresh token and force another registration.
+The connection being tested (`shoot-email-production` or
+`shoot-email-oauth`) must report `Not logged in`. Deleting the active client
+can invalidate a working refresh token and force another registration.
 
 Delete confirmed abandoned clients individually:
 

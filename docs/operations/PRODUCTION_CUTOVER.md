@@ -35,14 +35,13 @@ Provisioned on 2026-07-27:
   connections
 - Database migrations: 13 applied, zero users and zero messages at provisioning
 - Cloudflare Email Sending credentials: installed as Worker secrets
-- Global outbound delivery: disabled
-- OAuth rollout mode: allowlist, with no allowlisted subject until the
-  production Auth0 acceptance account is configured
+- Global outbound delivery: enabled behind database quotas and the emergency
+  kill switch
+- OAuth rollout mode: allowlist, with two production acceptance identities
 
 The production Worker passes health, database readiness, protected-resource
-metadata, and unauthenticated OAuth challenge checks at Cloudflare's edge.
-Auth0 production audience creation, OAuth mailbox initialization, inbound
-routing cutover, and real outbound acceptance remain pending.
+metadata, unauthenticated OAuth challenge, real inbound routing, and guarded
+real outbound acceptance checks at Cloudflare's edge.
 
 ## Safety Layers
 
@@ -161,8 +160,30 @@ The allowlisted production path passed its first complete acceptance test on
   pending inbox only after explicit acknowledgement.
 
 The production OAuth rollout remains restricted to explicitly configured Auth0
-subjects. A live non-allowlisted-identity rejection and two-mailbox isolation
-check remain outstanding acceptance items.
+subjects. On 2026-07-27, a live non-allowlisted production identity attempted
+request `5c8070b3-96cc-4ede-83a7-f3f5ec1e779e` and received the versioned MCP
+error `outbound_rollout_not_allowed`. The response returned through the normal
+tool contract rather than a pre-tool HTTP rejection, and a direct production
+database query confirmed that zero messages were persisted for the denied
+request. The approved-subject allowlist was restored immediately afterward.
+
+The two-mailbox isolation check completed on 2026-07-28:
+
+- Account A initialized `u_c0b755a4@yoyowza.com` with `created: true`, then
+  recovered the same mailbox with `created: false`.
+- Account A returned no messages from Account B's existing pending, processed,
+  or outbound collections.
+- Account B recovered its original `u_978fee62@yoyowza.com` mailbox after an
+  OAuth logout and login through its isolated Safari profile.
+- A Gmail message with subject `OAUTH-ISOLATION-A-20260728` traversed the real
+  Email Routing path into Account A as message
+  `db5ccba7-846a-490e-a831-2f426bee033a`.
+- Account B did not return that marker in any message collection. A direct
+  `get_message` call using Account A's message ID returned
+  `message_not_found`.
+
+All production cutover acceptance items are complete. Keep rollout mode on
+`allowlist` until operational monitoring and broader user onboarding are ready.
 
 ## Emergency Rollback
 
