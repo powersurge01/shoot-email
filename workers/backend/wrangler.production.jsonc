@@ -26,7 +26,8 @@
 		"ENABLE_REMOTE_MCP_OAUTH": "true",
 		"AUTH0_ISSUER": "https://dev-3ltbe81kduigsjty.us.auth0.com/",
 		"AUTH0_AUDIENCE": "https://mcp.shoot-email.yoyowza.com/mcp",
-		"OAUTH_OUTBOUND_ROLLOUT_MODE": "allowlist",
+		"OAUTH_OUTBOUND_ROLLOUT_MODE": "database_allowlist",
+		"OAUTH_BETA_ACCESS_MODE": "enforced",
 		"OUTBOUND_GLOBAL_HOURLY_LIMIT": "20",
 		"OUTBOUND_GLOBAL_DAILY_LIMIT": "100"
 	},

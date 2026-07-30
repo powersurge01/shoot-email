@@ -4,7 +4,13 @@ import { createShootEmailMcpServer } from './mcpServer.js';
 
 const MAX_MCP_BODY_BYTES = 1_000_000;
 const OAUTH_SCOPES = ['mailbox:read', 'mailbox:send', 'mailbox:acknowledge'];
-const OAUTH_OUTBOUND_ROLLOUT_MODES = new Set(['disabled', 'allowlist', 'open']);
+const OAUTH_OUTBOUND_ROLLOUT_MODES = new Set([
+  'disabled',
+  'allowlist',
+  'database_allowlist',
+  'open',
+]);
+const OAUTH_BETA_ACCESS_MODES = new Set(['disabled', 'enforced']);
 const jwksByUrl = new Map();
 
 export async function authorizeRemoteMcpDemo(request, env) {
@@ -46,7 +52,13 @@ export async function authorizeRemoteMcpOAuth(request, env, options = {}) {
   const issuer = normalizeIssuer(env.AUTH0_ISSUER);
   const audience = env.AUTH0_AUDIENCE?.trim();
   const rolloutMode = env.OAUTH_OUTBOUND_ROLLOUT_MODE?.trim() || 'disabled';
-  if (!issuer || !audience || !OAUTH_OUTBOUND_ROLLOUT_MODES.has(rolloutMode)) {
+  const betaAccessMode = env.OAUTH_BETA_ACCESS_MODE?.trim() || 'disabled';
+  if (
+    !issuer
+    || !audience
+    || !OAUTH_OUTBOUND_ROLLOUT_MODES.has(rolloutMode)
+    || !OAUTH_BETA_ACCESS_MODES.has(betaAccessMode)
+  ) {
     return { enabled: true, configured: false, authorized: false };
   }
 
@@ -83,6 +95,7 @@ export async function authorizeRemoteMcpOAuth(request, env, options = {}) {
       authorized: true,
       scopes,
       outboundPolicy,
+      betaAccessMode,
       principal: {
         provider: `auth0:${new URL(issuer).host}`,
         subject: payload.sub,
@@ -192,6 +205,30 @@ export function remoteMcpForbiddenResponse(request, requiredScope) {
   });
 }
 
+export function remoteMcpBetaAccessDeniedResponse() {
+  return Response.json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32004,
+      message: 'This account is not enabled for the Shoot Email private beta.',
+      data: { reason: 'beta_access_not_allowed' },
+    },
+    id: null,
+  }, { status: 403 });
+}
+
+export function applyBetaAccessPolicy(authorization, grant) {
+  const active = grant?.accessStatus === 'active';
+  const accessAllowed = authorization.betaAccessMode !== 'enforced' || active;
+  const outboundPolicy = authorization.outboundPolicy?.mode === 'database_allowlist'
+    ? {
+        mode: 'database_allowlist',
+        allowed: active && grant?.outboundEnabled === true,
+      }
+    : authorization.outboundPolicy;
+  return { accessAllowed, outboundPolicy };
+}
+
 export function remoteMcpMisconfiguredResponse() {
   return Response.json({
     jsonrpc: '2.0',
@@ -252,6 +289,9 @@ function getOutboundRolloutPolicy(mode, configuredSubjects, subject) {
     return { mode, allowed: true };
   }
   if (mode === 'disabled') {
+    return { mode, allowed: false };
+  }
+  if (mode === 'database_allowlist') {
     return { mode, allowed: false };
   }
 

@@ -69,11 +69,12 @@ The authenticated production deployment must use its own Neon database and
 Hyperdrive configuration; do not point production at either the hackathon demo
 or OAuth staging database. Keep the production OAuth transport on a stable
 custom hostname. During rollout, require both the global outbound kill switch
-and a default-deny allowlist derived only from the validated Auth0 `sub` claim.
-Never accept an allowlist identity through MCP tool arguments. Cut over inbound
-routing before enabling provider sends, then enable real delivery only for an
-allowlisted acceptance account. The operational sequence and rollback steps
-are recorded in `docs/operations/PRODUCTION_CUTOVER.md`.
+and a default-deny database beta grant derived only from the validated Auth0
+`sub` claim. Never accept a beta identity through MCP tool arguments. Cut over
+inbound routing before enabling provider sends, then enable real delivery only
+for an acceptance account whose grant explicitly enables outbound delivery.
+The operational sequence and rollback steps are recorded in
+`docs/operations/PRODUCTION_CUTOVER.md`.
 
 Codex uses strict Dynamic Client Registration plus Authorization Code with PKCE
 and refresh tokens. Keep the default third-party user grant limited to the three
@@ -423,6 +424,15 @@ Postgres from a controlled local or CI environment.
   delivery unless a separately reviewed canary identity is introduced.
 - Verify recovery against an isolated Neon branch and refuse to run recovery
   verification against the production connection string.
+- Gate the entire production MCP mailbox behind a database beta grant derived
+  only from the validated Auth0 provider, subject, and organization. Keep
+  outbound permission separate from general mailbox access.
+- Never derive an Auth0 subject from an email address. Use the identity
+  provider's authenticated user record to resolve the exact subject.
+- Preserve revoked beta grants for audit history instead of deleting them.
+- Treat account anonymization as irreversible: disable matching grants, remove
+  external identities and private mailbox data, and retain aliases only as
+  non-reusable tombstones.
 
 ## Practical First Milestone
 

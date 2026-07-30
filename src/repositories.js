@@ -9,6 +9,11 @@ const USER_SELECT = `
   sending_status,
   sending_suspended_at,
   sending_suspension_reason,
+  account_status,
+  account_status_changed_at,
+  account_status_reason,
+  account_status_updated_by,
+  anonymized_at,
   email_alias_changed_at,
   created_at
 `;
@@ -21,6 +26,11 @@ const QUALIFIED_USER_SELECT = `
   users.sending_status,
   users.sending_suspended_at,
   users.sending_suspension_reason,
+  users.account_status,
+  users.account_status_changed_at,
+  users.account_status_reason,
+  users.account_status_updated_by,
+  users.anonymized_at,
   users.email_alias_changed_at,
   users.created_at
 `;
@@ -141,6 +151,115 @@ export async function findUsersForOperator({
     selector.params,
   );
   return result.rows;
+}
+
+export async function getBetaAccessGrant({
+  provider,
+  providerSubject,
+  providerOrganization,
+}) {
+  const result = await query(
+    `
+      SELECT *
+      FROM beta_access_grants
+      WHERE provider = $1
+        AND provider_subject = $2
+        AND provider_organization IS NOT DISTINCT FROM $3
+    `,
+    [provider, providerSubject, providerOrganization || null],
+  );
+  return result.rows[0] || null;
+}
+
+export async function listBetaAccessGrants() {
+  const result = await query(
+    `
+      SELECT
+        beta_access_grants.*,
+        users.id AS user_id,
+        users.email_alias,
+        users.account_status
+      FROM beta_access_grants
+      LEFT JOIN user_identities
+        ON user_identities.provider = beta_access_grants.provider
+       AND user_identities.provider_subject = beta_access_grants.provider_subject
+       AND user_identities.provider_organization
+         IS NOT DISTINCT FROM beta_access_grants.provider_organization
+      LEFT JOIN users ON users.id = user_identities.user_id
+      ORDER BY beta_access_grants.created_at, beta_access_grants.provider_subject
+    `,
+  );
+  return result.rows;
+}
+
+export async function upsertBetaAccessGrant({
+  provider,
+  providerSubject,
+  providerOrganization,
+  outboundEnabled,
+  updatedBy,
+}) {
+  const result = await query(
+    `
+      INSERT INTO beta_access_grants (
+        provider,
+        provider_subject,
+        provider_organization,
+        access_status,
+        outbound_enabled,
+        status_reason,
+        updated_by
+      )
+      VALUES ($1, $2, $3, 'active', $4, NULL, $5)
+      ON CONFLICT ON CONSTRAINT beta_access_grants_identity_key
+      DO UPDATE SET
+        access_status = 'active',
+        outbound_enabled = EXCLUDED.outbound_enabled,
+        status_reason = NULL,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = now()
+      RETURNING *
+    `,
+    [
+      provider,
+      providerSubject,
+      providerOrganization || null,
+      outboundEnabled,
+      updatedBy,
+    ],
+  );
+  return result.rows[0];
+}
+
+export async function disableBetaAccessGrant({
+  provider,
+  providerSubject,
+  providerOrganization,
+  reason,
+  updatedBy,
+}) {
+  const result = await query(
+    `
+      UPDATE beta_access_grants
+      SET access_status = 'disabled',
+          outbound_enabled = FALSE,
+          status_reason = $4,
+          updated_by = $5,
+          updated_at = now()
+      WHERE provider = $1
+        AND provider_subject = $2
+        AND provider_organization IS NOT DISTINCT FROM $3
+      RETURNING *
+    `,
+    [
+      provider,
+      providerSubject,
+      providerOrganization || null,
+      reason,
+      updatedBy,
+    ],
+  );
+  return result.rows[0] || null;
 }
 
 export async function createUserIdentity({
@@ -409,8 +528,14 @@ export async function reserveOutboundMessage({
     }
 
     let isNewRecipient = false;
-    let decision = null;
-    if (enforceAbuseControls) {
+    let decision = user.account_status === 'active'
+      ? null
+      : rejection(
+          'account_disabled',
+          'account_access',
+          'This Shoot Email account is not active.',
+        );
+    if (enforceAbuseControls && !decision) {
       const relationship = await txQuery(
         `
           SELECT first_inbound_at, first_outbound_at
@@ -730,6 +855,128 @@ export async function reactivateUserSending(userId) {
   return result.rows[0] || null;
 }
 
+export async function disableUserAccount({ userId, reason, updatedBy }) {
+  const result = await query(
+    `
+      UPDATE users
+      SET account_status = 'disabled',
+          account_status_changed_at = now(),
+          account_status_reason = $2,
+          account_status_updated_by = $3
+      WHERE id = $1 AND account_status <> 'anonymized'
+      RETURNING ${USER_SELECT}
+    `,
+    [userId, reason, updatedBy],
+  );
+  return result.rows[0] || null;
+}
+
+export async function enableUserAccount({ userId, updatedBy }) {
+  const result = await query(
+    `
+      UPDATE users
+      SET account_status = 'active',
+          account_status_changed_at = now(),
+          account_status_reason = NULL,
+          account_status_updated_by = $2
+      WHERE id = $1 AND account_status = 'disabled'
+      RETURNING ${USER_SELECT}
+    `,
+    [userId, updatedBy],
+  );
+  return result.rows[0] || null;
+}
+
+export async function anonymizeUserAccount({
+  userId,
+  reason,
+  updatedBy,
+}) {
+  return transaction(async (txQuery) => {
+    const userResult = await txQuery(
+      `SELECT ${USER_SELECT} FROM users WHERE id = $1 FOR UPDATE`,
+      [userId],
+    );
+    const user = userResult.rows[0];
+    if (!user) return null;
+    if (user.account_status === 'anonymized') {
+      return { user, changed: false };
+    }
+
+    await txQuery(
+      `
+        UPDATE beta_access_grants AS grants
+        SET access_status = 'disabled',
+            outbound_enabled = FALSE,
+            status_reason = $2,
+            updated_by = $3,
+            updated_at = now()
+        FROM user_identities AS identities
+        WHERE identities.user_id = $1
+          AND grants.provider = identities.provider
+          AND grants.provider_subject = identities.provider_subject
+          AND grants.provider_organization
+            IS NOT DISTINCT FROM identities.provider_organization
+      `,
+      [userId, reason, updatedBy],
+    );
+    await txQuery(
+      'DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM messages WHERE user_id = $1)',
+      [userId],
+    );
+    await txQuery(
+      `
+        UPDATE messages
+        SET from_email = 'redacted@invalid',
+            from_name = NULL,
+            to_email = 'redacted@invalid',
+            subject = '',
+            text_body = '',
+            provider_message_id = NULL,
+            delivery_details = '{}'::jsonb,
+            delivery_error_message = NULL
+        WHERE user_id = $1
+      `,
+      [userId],
+    );
+    const sessions = await txQuery(
+      'SELECT id::text FROM chat_sessions WHERE user_id = $1',
+      [userId],
+    );
+    const sessionIds = sessions.rows.map((row) => row.id);
+    await txQuery('DELETE FROM chat_sessions WHERE user_id = $1', [userId]);
+    await txQuery('DELETE FROM recipient_relationships WHERE user_id = $1', [userId]);
+    await txQuery(
+      `
+        DELETE FROM outbound_usage_buckets
+        WHERE (scope_type IN ('user', 'user_new_recipient') AND scope_key = $1)
+           OR (scope_type = 'session' AND scope_key = ANY($2::text[]))
+      `,
+      [userId, sessionIds],
+    );
+    await txQuery('DELETE FROM user_identities WHERE user_id = $1', [userId]);
+    const updated = await txQuery(
+      `
+        UPDATE users
+        SET sender_display_name = NULL,
+            account_tier = 'guest',
+            sending_status = 'suspended',
+            sending_suspended_at = now(),
+            sending_suspension_reason = 'Account anonymized',
+            account_status = 'anonymized',
+            account_status_changed_at = now(),
+            account_status_reason = $2,
+            account_status_updated_by = $3,
+            anonymized_at = now()
+        WHERE id = $1
+        RETURNING ${USER_SELECT}
+      `,
+      [userId, reason, updatedBy],
+    );
+    return { user: updated.rows[0], changed: true };
+  });
+}
+
 export async function getRuntimeControls(executor = query) {
   const result = await executor(
     `
@@ -793,15 +1040,29 @@ export async function setRuntimeOutboundSending({
 }
 
 export async function getOperationsSnapshot() {
-  const [controls, users, messages, pending] = await Promise.all([
+  const [controls, users, beta, messages, pending] = await Promise.all([
     getRuntimeControls(),
     query(
       `
         SELECT
           count(*)::int AS total,
           count(*) FILTER (WHERE sending_status = 'suspended')::int AS suspended,
-          count(*) FILTER (WHERE account_tier = 'registered')::int AS registered
+          count(*) FILTER (WHERE account_tier = 'registered')::int AS registered,
+          count(*) FILTER (WHERE account_status = 'disabled')::int AS disabled,
+          count(*) FILTER (WHERE account_status = 'anonymized')::int AS anonymized
         FROM users
+      `,
+    ),
+    query(
+      `
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE access_status = 'active')::int AS active,
+          count(*) FILTER (
+            WHERE access_status = 'active' AND outbound_enabled
+          )::int AS outbound_enabled,
+          count(*) FILTER (WHERE access_status = 'disabled')::int AS disabled
+        FROM beta_access_grants
       `,
     ),
     query(
@@ -829,6 +1090,7 @@ export async function getOperationsSnapshot() {
   return {
     controls,
     users: users.rows[0],
+    beta: beta.rows[0],
     messages: messages.rows,
     pending: pending.rows[0],
   };

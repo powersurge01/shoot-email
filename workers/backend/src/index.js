@@ -10,12 +10,15 @@ import {
 import {
   authorizeRemoteMcpDemo,
   authorizeRemoteMcpOAuth,
+  applyBetaAccessPolicy,
   handleRemoteMcpRequest,
   oauthProtectedResourceMetadata,
   remoteMcpMisconfiguredResponse,
+  remoteMcpBetaAccessDeniedResponse,
   remoteMcpOAuthUnauthorizedResponse,
   remoteMcpUnauthorizedResponse,
 } from '../../../src/remoteMcp.js';
+import { getBetaAccessPolicy } from '../../../src/services.js';
 
 const MAX_JSON_BODY_BYTES = 1_000_000;
 
@@ -102,6 +105,25 @@ async function handleBackendRequestWithEnvironment(request, env, options) {
       }
 
       if (request.method === 'POST' && url.pathname === '/mcp') {
+        let betaGrant = null;
+        if (remoteMcpAuthorization.principal?.authentication === 'auth0_oauth') {
+          betaGrant = await getBetaAccessPolicy({
+            provider: remoteMcpAuthorization.principal.provider,
+            subject: remoteMcpAuthorization.principal.subject,
+            organization: remoteMcpAuthorization.principal.organization,
+          });
+          const betaPolicy = applyBetaAccessPolicy(
+            remoteMcpAuthorization,
+            betaGrant,
+          );
+          if (!betaPolicy.accessAllowed) {
+            console.warn(JSON.stringify({
+              event: 'mcp.beta_access.rejected',
+            }));
+            return remoteMcpBetaAccessDeniedResponse();
+          }
+          remoteMcpAuthorization.outboundPolicy = betaPolicy.outboundPolicy;
+        }
         return handleRemoteMcpRequest(request, {
           principal: remoteMcpAuthorization.principal,
           scopes: remoteMcpAuthorization.scopes || ['mailbox:read', 'mailbox:send', 'mailbox:acknowledge'],

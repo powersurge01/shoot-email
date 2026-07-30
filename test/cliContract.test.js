@@ -69,6 +69,53 @@ test('CLI contract works end to end through subprocess JSON and exit codes', asy
   ]);
   assertContractSuccess(lookup.body);
   assert.equal(lookup.body.users[0].emailAlias, address);
+  const userId = lookup.body.users[0].id;
+
+  const betaIdentity = {
+    provider: 'auth0:test.example.auth0.com',
+    subject: 'google-oauth2|cli-contract-user',
+  };
+  const betaGrant = await runCli([
+    'ops', 'beta', 'grant',
+    '--provider', betaIdentity.provider,
+    '--subject', betaIdentity.subject,
+    '--outbound',
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(betaGrant.body);
+  assert.equal(betaGrant.body.grant.accessStatus, 'active');
+  assert.equal(betaGrant.body.grant.outboundEnabled, true);
+
+  const betaList = await runCli(['ops', 'beta', 'list']);
+  assertContractSuccess(betaList.body);
+  assert.equal(betaList.body.grants.length, 1);
+  assert.equal(betaList.body.grants[0].subject, betaIdentity.subject);
+
+  const betaRevoked = await runCli([
+    'ops', 'beta', 'revoke',
+    '--provider', betaIdentity.provider,
+    '--subject', betaIdentity.subject,
+    '--reason', 'CLI contract test complete',
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(betaRevoked.body);
+  assert.equal(betaRevoked.body.grant.accessStatus, 'disabled');
+  assert.equal(betaRevoked.body.grant.outboundEnabled, false);
+
+  const accountDisabled = await runCli([
+    'ops', 'user', 'disable', userId,
+    '--reason', 'CLI account lifecycle test',
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(accountDisabled.body);
+  assert.equal(accountDisabled.body.user.accountStatus, 'disabled');
+
+  const accountEnabled = await runCli([
+    'ops', 'user', 'enable', userId,
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(accountEnabled.body);
+  assert.equal(accountEnabled.body.user.accountStatus, 'active');
 
   const enabled = await runCli([
     'ops', 'outbound', 'enable', '--actor', 'cli-test',
@@ -173,6 +220,33 @@ test('CLI validation failures use the versioned error envelope', async () => {
   assert.equal(missingOption.body.contractVersion, '2.0');
   assert.equal(missingOption.body.error.code, 'invalid_cli_usage');
   assert.match(missingOption.body.error.message, /required option '--request-id/);
+});
+
+test('CLI account anonymization requires exact mailbox confirmation', async () => {
+  const initialized = await runCli(['init']);
+  const address = initialized.body.mailbox.address;
+  const lookup = await runCli(['ops', 'user', 'lookup', '--alias', address]);
+  const userId = lookup.body.users[0].id;
+
+  const rejected = await runCli([
+    'ops', 'user', 'anonymize', userId,
+    '--confirm-alias', 'wrong@in.test',
+    '--reason', 'CLI deletion test',
+    '--actor', 'cli-test',
+  ], { allowFailure: true });
+  assert.equal(rejected.exitCode, 1);
+  assert.equal(rejected.body.error.code, 'anonymize_confirmation_failed');
+
+  const anonymized = await runCli([
+    'ops', 'user', 'anonymize', userId,
+    '--confirm-alias', address,
+    '--reason', 'CLI deletion test',
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(anonymized.body);
+  assert.equal(anonymized.body.changed, true);
+  assert.equal(anonymized.body.user.accountStatus, 'anonymized');
+  assert.equal(anonymized.body.user.emailAlias, address);
 });
 
 async function runCli(args, { allowFailure = false } = {}) {

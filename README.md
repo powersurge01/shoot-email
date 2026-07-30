@@ -716,9 +716,10 @@ Production uses Cloudflare Email Sending code, but real delivery remains behind
 two independent rollout controls:
 
 - `OUTBOUND_SENDING_ENABLED=false` is the global provider kill switch.
-- `OAUTH_OUTBOUND_ROLLOUT_MODE=allowlist` permits `send_text_email` only for
-  validated Auth0 subjects stored in the
-  `OAUTH_OUTBOUND_ALLOWED_SUBJECTS` Worker secret.
+- `OAUTH_BETA_ACCESS_MODE=enforced` denies every mailbox tool unless the
+  validated Auth0 subject has an active database beta grant.
+- `OAUTH_OUTBOUND_ROLLOUT_MODE=database_allowlist` permits `send_text_email`
+  only when that grant also enables outbound delivery.
 
 Build, deploy, and verify the unauthenticated production surface with:
 
@@ -726,11 +727,15 @@ Build, deploy, and verify the unauthenticated production surface with:
 npm run backend:production:build
 npm run backend:production:deploy
 npm run smoke:production
+npm run ops:beta:readiness
 ```
 
 The complete provisioning, inbound cutover, real-delivery acceptance, and
 rollback process is in
 [`docs/operations/PRODUCTION_CUTOVER.md`](docs/operations/PRODUCTION_CUTOVER.md).
+Private-beta invitation, acceptance, revocation, and anonymization procedures
+are in
+[`docs/operations/PRIVATE_BETA.md`](docs/operations/PRIVATE_BETA.md).
 
 ## Built With Codex and GPT-5.6 Sol
 

@@ -7,9 +7,13 @@ import { formatMessage, formatMessageRow } from './formatters.js';
 import { migrate } from './migrate.js';
 import {
   acknowledgeMessages,
+  anonymizeAccount,
   clearSenderDisplayName,
+  disableAccount,
   disableRuntimeOutboundSending,
+  enableAccount,
   enableRuntimeOutboundSending,
+  grantBetaAccess,
   getAbuseStatus,
   getCurrentUser,
   getOperationsReport,
@@ -18,12 +22,14 @@ import {
   getSenderIdentity,
   getServiceStatus,
   initMailbox,
+  listBetaCohort,
   listHistory,
   listInbox,
   listOutboundHistory,
   lookupOperationalUsers,
   readMessage,
   reactivateSending,
+  revokeBetaAccess,
   sendEmail,
   setAccountTier,
   setCustomEmailAlias,
@@ -193,6 +199,83 @@ opsUser
     emailAlias: options.alias,
     provider: options.provider,
     providerSubject: options.subject,
+  })));
+
+opsUser
+  .command('disable')
+  .description('Disable all mailbox access for an internal user')
+  .argument('<user-id>', 'internal user ID')
+  .requiredOption('--reason <reason>', 'operator-visible reason')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (userId, options) => disableAccount({
+    userId,
+    reason: options.reason,
+    updatedBy: options.actor,
+  })));
+
+opsUser
+  .command('enable')
+  .description('Re-enable a disabled internal user account')
+  .argument('<user-id>', 'internal user ID')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (userId, options) => enableAccount({
+    userId,
+    updatedBy: options.actor,
+  })));
+
+opsUser
+  .command('anonymize')
+  .description('Irreversibly redact mailbox data while preserving alias tombstones')
+  .argument('<user-id>', 'internal user ID')
+  .requiredOption('--confirm-alias <address>', 'must exactly match the current mailbox')
+  .requiredOption('--reason <reason>', 'operator-visible reason')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (userId, options) => anonymizeAccount({
+    userId,
+    confirmAlias: options.confirmAlias,
+    reason: options.reason,
+    updatedBy: options.actor,
+  })));
+
+const opsBeta = ops
+  .command('beta')
+  .description('Administer the Auth0 private-beta cohort');
+
+opsBeta
+  .command('list')
+  .description('List beta grants and linked mailbox state')
+  .action(runJson(async () => listBetaCohort()));
+
+opsBeta
+  .command('grant')
+  .description('Create or reactivate an Auth0 beta grant')
+  .requiredOption('--provider <provider>', 'Auth0 provider namespace')
+  .requiredOption('--subject <subject>', 'validated Auth0 subject')
+  .option('--organization <organization>', 'validated Auth0 organization')
+  .option('--outbound', 'allow real outbound email for this identity')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (options) => grantBetaAccess({
+    provider: options.provider,
+    subject: options.subject,
+    organization: options.organization,
+    outboundEnabled: options.outbound,
+    updatedBy: options.actor,
+  })));
+
+opsBeta
+  .command('revoke')
+  .description('Disable an Auth0 beta grant without deleting its audit record')
+  .requiredOption('--provider <provider>', 'Auth0 provider namespace')
+  .requiredOption('--subject <subject>', 'validated Auth0 subject')
+  .option('--organization <organization>', 'validated Auth0 organization')
+  .requiredOption('--reason <reason>', 'operator-visible reason')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (options) => revokeBetaAccess({
+    provider: options.provider,
+    subject: options.subject,
+    organization: options.organization,
+    reason: options.reason,
+    updatedBy: options.actor,
   })));
 
 program

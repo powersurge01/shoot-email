@@ -7,6 +7,7 @@ import {
   SignJWT,
 } from 'jose';
 import {
+  applyBetaAccessPolicy,
   authorizeRemoteMcpOAuth,
   handleRemoteMcpRequest,
 } from '../src/remoteMcp.js';
@@ -297,6 +298,39 @@ test('OAuth outbound rollout defaults closed and supports an exact subject allow
       message: 'Outbound email is not enabled for this authenticated identity.',
       retryable: false,
     },
+  });
+});
+
+test('database beta policy defaults closed for access and outbound delivery', () => {
+  const authorization = {
+    betaAccessMode: 'enforced',
+    outboundPolicy: { mode: 'database_allowlist', allowed: false },
+  };
+
+  assert.deepEqual(applyBetaAccessPolicy(authorization, null), {
+    accessAllowed: false,
+    outboundPolicy: { mode: 'database_allowlist', allowed: false },
+  });
+  assert.deepEqual(applyBetaAccessPolicy(authorization, {
+    accessStatus: 'active',
+    outboundEnabled: false,
+  }), {
+    accessAllowed: true,
+    outboundPolicy: { mode: 'database_allowlist', allowed: false },
+  });
+  assert.deepEqual(applyBetaAccessPolicy(authorization, {
+    accessStatus: 'active',
+    outboundEnabled: true,
+  }), {
+    accessAllowed: true,
+    outboundPolicy: { mode: 'database_allowlist', allowed: true },
+  });
+  assert.deepEqual(applyBetaAccessPolicy(authorization, {
+    accessStatus: 'disabled',
+    outboundEnabled: true,
+  }), {
+    accessAllowed: false,
+    outboundPolicy: { mode: 'database_allowlist', allowed: false },
   });
 });
 

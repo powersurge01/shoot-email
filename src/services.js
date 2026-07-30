@@ -11,15 +11,20 @@ import { createMailProvider } from './mailProviders.js';
 import { readLocalConfig, writeLocalConfig } from './localConfig.js';
 import {
   acknowledgeInboundMessages,
+  anonymizeUserAccount,
   changeUserEmailAlias,
   completeOutboundMessage,
   createInboundMessage,
   createUser,
   createUserIdentity,
+  disableBetaAccessGrant,
+  disableUserAccount,
+  enableUserAccount,
   findOrCreateChatSession,
   findUserByIdentity,
   findUsersForOperator,
   failOutboundMessage,
+  getBetaAccessGrant,
   getMessageForUser,
   getLatestOutboundAttempt,
   getOperationsSnapshot,
@@ -28,6 +33,7 @@ import {
   getRuntimeControls,
   getUserByAlias,
   getUserById,
+  listBetaAccessGrants,
   listInboundMessages,
   listOutboundMessages,
   reactivateUserSending,
@@ -38,6 +44,7 @@ import {
   touchUserIdentity,
   updateUserAccountTier,
   updateUserSenderDisplayName,
+  upsertBetaAccessGrant,
 } from './repositories.js';
 
 export async function initMailbox() {
@@ -425,6 +432,9 @@ export async function ingestInboundMessage(normalizedMessage) {
   if (!user) {
     return { stored: false, reason: 'unknown_recipient' };
   }
+  if (user.account_status !== 'active') {
+    return { stored: false, reason: 'recipient_disabled' };
+  }
 
   const result = await createInboundMessage({
     userId: user.id,
@@ -644,6 +654,131 @@ export async function lookupOperationalUsers({
   };
 }
 
+export async function getBetaAccessPolicy({
+  provider,
+  subject,
+  organization,
+}) {
+  validateExternalIdentity({ provider, subject });
+  const grant = await getBetaAccessGrant({
+    provider: provider.trim(),
+    providerSubject: subject.trim(),
+    providerOrganization: normalizeOptionalOperatorText(organization, 'organization', 500),
+  });
+  return grant ? serializeBetaGrant(grant) : null;
+}
+
+export async function listBetaCohort() {
+  const grants = await listBetaAccessGrants();
+  return {
+    ok: true,
+    grants: grants.map(serializeBetaGrant),
+  };
+}
+
+export async function grantBetaAccess({
+  provider,
+  subject,
+  organization,
+  outboundEnabled,
+  updatedBy,
+}) {
+  const identity = normalizeBetaIdentity({ provider, subject, organization });
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const grant = await upsertBetaAccessGrant({
+    ...identity,
+    outboundEnabled: outboundEnabled === true,
+    updatedBy: actor,
+  });
+  return { ok: true, grant: serializeBetaGrant(grant) };
+}
+
+export async function revokeBetaAccess({
+  provider,
+  subject,
+  organization,
+  reason,
+  updatedBy,
+}) {
+  const identity = normalizeBetaIdentity({ provider, subject, organization });
+  const normalizedReason = normalizeOperatorText(reason, 'reason', 500);
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const grant = await disableBetaAccessGrant({
+    ...identity,
+    reason: normalizedReason,
+    updatedBy: actor,
+  });
+  if (!grant) {
+    throw requestError('beta_grant_not_found', 'The beta access grant was not found.');
+  }
+  return { ok: true, grant: serializeBetaGrant(grant) };
+}
+
+export async function disableAccount({ userId, reason, updatedBy }) {
+  validateUuid(userId, 'userId', 'invalid_user_id');
+  const normalizedReason = normalizeOperatorText(reason, 'reason', 500);
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const user = await disableUserAccount({
+    userId,
+    reason: normalizedReason,
+    updatedBy: actor,
+  });
+  if (!user) {
+    throw requestError(
+      'account_not_disableable',
+      'The account was not found or has already been anonymized.',
+    );
+  }
+  return { ok: true, user: serializeAbuseUser(user) };
+}
+
+export async function enableAccount({ userId, updatedBy }) {
+  validateUuid(userId, 'userId', 'invalid_user_id');
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const user = await enableUserAccount({ userId, updatedBy: actor });
+  if (!user) {
+    throw requestError(
+      'account_not_enableable',
+      'Only an existing disabled account can be enabled.',
+    );
+  }
+  return { ok: true, user: serializeAbuseUser(user) };
+}
+
+export async function anonymizeAccount({
+  userId,
+  confirmAlias,
+  reason,
+  updatedBy,
+}) {
+  validateUuid(userId, 'userId', 'invalid_user_id');
+  const user = await getUserById(userId);
+  if (!user) {
+    throw requestError('user_not_found', `User not found: ${userId}`);
+  }
+  const confirmation = typeof confirmAlias === 'string'
+    ? confirmAlias.trim().toLowerCase()
+    : '';
+  if (confirmation !== user.email_alias.toLowerCase()) {
+    throw requestError(
+      'anonymize_confirmation_failed',
+      'confirmAlias must exactly match the current mailbox address.',
+    );
+  }
+  const normalizedReason = normalizeOperatorText(reason, 'reason', 500);
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const result = await anonymizeUserAccount({
+    userId,
+    reason: normalizedReason,
+    updatedBy: actor,
+  });
+  return {
+    ok: true,
+    changed: result.changed,
+    user: serializeAbuseUser(result.user),
+  };
+}
+
 export async function getOperationsReport() {
   const snapshot = await getOperationsSnapshot();
   return {
@@ -652,6 +787,7 @@ export async function getOperationsReport() {
     environment: getConfig().environment,
     controls: serializeRuntimeControls(snapshot.controls, getConfig()),
     users: snapshot.users,
+    beta: snapshot.beta,
     messagesLast24Hours: snapshot.messages.map((row) => ({
       direction: row.direction,
       status: row.status,
@@ -726,6 +862,7 @@ export async function findOrCreateExternalContext({
   });
 
   if (user) {
+    assertUserAccountActive(user);
     await touchUserIdentity({
       provider,
       providerSubject: subject,
@@ -780,6 +917,7 @@ export async function findExternalContext({
     providerOrganization: organization,
   });
   if (!user) return null;
+  assertUserAccountActive(user);
 
   await touchUserIdentity({
     provider,
@@ -1215,6 +1353,32 @@ function serializeAbuseUser(user) {
     sendingStatus: user.sending_status,
     suspendedAt: user.sending_suspended_at,
     suspensionReason: user.sending_suspension_reason,
+    accountStatus: user.account_status,
+    accountStatusChangedAt: user.account_status_changed_at,
+    accountStatusReason: user.account_status_reason,
+    accountStatusUpdatedBy: user.account_status_updated_by,
+    anonymizedAt: user.anonymized_at,
+  };
+}
+
+function serializeBetaGrant(grant) {
+  return {
+    provider: grant.provider,
+    subject: grant.provider_subject,
+    organization: grant.provider_organization,
+    accessStatus: grant.access_status,
+    outboundEnabled: grant.outbound_enabled,
+    statusReason: grant.status_reason,
+    updatedBy: grant.updated_by,
+    createdAt: grant.created_at,
+    updatedAt: grant.updated_at,
+    user: grant.user_id
+      ? {
+          id: grant.user_id,
+          emailAlias: grant.email_alias,
+          accountStatus: grant.account_status,
+        }
+      : null,
   };
 }
 
@@ -1250,6 +1414,41 @@ function normalizeOperatorText(value, field, maxCharacters) {
     );
   }
   return normalized;
+}
+
+function normalizeOptionalOperatorText(value, field, maxCharacters) {
+  if (value === undefined || value === null || value === '') return null;
+  return normalizeOperatorText(value, field, maxCharacters);
+}
+
+function normalizeBetaIdentity({ provider, subject, organization }) {
+  const normalizedProvider = normalizeOperatorText(provider, 'provider', 200);
+  if (!normalizedProvider.startsWith('auth0:')) {
+    throw requestError(
+      'invalid_beta_provider',
+      'Beta access grants require an Auth0 provider namespace.',
+    );
+  }
+  return {
+    provider: normalizedProvider,
+    providerSubject: normalizeOperatorText(subject, 'subject', 500),
+    providerOrganization: normalizeOptionalOperatorText(
+      organization,
+      'organization',
+      500,
+    ),
+  };
+}
+
+function assertUserAccountActive(user) {
+  if (user.account_status === 'active') return;
+  const error = requestError(
+    user.account_status === 'anonymized'
+      ? 'account_anonymized'
+      : 'account_disabled',
+    'This Shoot Email account is not active.',
+  );
+  throw error;
 }
 
 function usageMap(rows) {

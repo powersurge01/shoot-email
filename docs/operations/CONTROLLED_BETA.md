@@ -205,5 +205,8 @@ On 2026-07-29:
 - DCR usage is below the warning threshold.
 - Runtime disable and re-enable have been rehearsed.
 - A Neon recovery branch passes `db:verify-recovery`.
-- Three to five allowlisted users complete mailbox initialization, send,
+- Three to five database-granted users complete mailbox initialization, send,
   receive, idempotent retry, and account-isolation checks.
+
+Use `docs/operations/PRIVATE_BETA.md` for participant onboarding, access
+revocation, account disablement, anonymization, and the final release gate.

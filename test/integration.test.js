@@ -19,12 +19,16 @@ const { normalizeInboundPayload } = await import('../src/inboundEmail.js');
 const { resetDatabase } = await import('../src/resetDb.js');
 const {
   acknowledgeMessages,
+  anonymizeAccount,
   clearSenderDisplayName,
+  disableAccount,
   disableRuntimeOutboundSending,
   enableRuntimeOutboundSending,
+  enableAccount,
   findOrCreateExternalContext,
   findOrCreateOpenAiContext,
   getAbuseStatus,
+  getBetaAccessPolicy,
   getOperationsReport,
   getOutboundStatus,
   getRuntimeOutboundStatus,
@@ -32,12 +36,15 @@ const {
   getServiceStatus,
   initMailbox,
   ingestInboundMessage,
+  grantBetaAccess,
+  listBetaCohort,
   listHistory,
   listInbox,
   listOutboundHistory,
   lookupOperationalUsers,
   readMessage,
   reactivateSending,
+  revokeBetaAccess,
   sendEmail,
   setAccountTier,
   setCustomEmailAlias,
@@ -989,6 +996,138 @@ test('Auth0 and OpenAI subjects remain distinct external identity namespaces', a
     },
     { provider: 'openai_apps', provider_subject: 'shared-subject' },
   ]);
+});
+
+test('beta grants control access and outbound permission independently', async () => {
+  const identity = {
+    provider: 'auth0:tenant.example.auth0.com',
+    subject: 'google-oauth2|beta-user',
+    organization: null,
+  };
+  assert.equal(await getBetaAccessPolicy(identity), null);
+
+  const granted = await grantBetaAccess({
+    ...identity,
+    outboundEnabled: false,
+    updatedBy: 'integration-test',
+  });
+  assert.equal(granted.grant.accessStatus, 'active');
+  assert.equal(granted.grant.outboundEnabled, false);
+
+  const context = await findOrCreateExternalContext(identity);
+  const cohort = await listBetaCohort();
+  assert.equal(cohort.grants.length, 1);
+  assert.equal(cohort.grants[0].user.id, context.user.id);
+
+  const outboundGrant = await grantBetaAccess({
+    ...identity,
+    outboundEnabled: true,
+    updatedBy: 'integration-test',
+  });
+  assert.equal(outboundGrant.grant.outboundEnabled, true);
+
+  const revoked = await revokeBetaAccess({
+    ...identity,
+    reason: 'Acceptance complete',
+    updatedBy: 'integration-test',
+  });
+  assert.equal(revoked.grant.accessStatus, 'disabled');
+  assert.equal(revoked.grant.outboundEnabled, false);
+});
+
+test('account disable and anonymization block access while preserving alias tombstones', async () => {
+  const identity = {
+    provider: 'auth0:tenant.example.auth0.com',
+    subject: 'google-oauth2|lifecycle-user',
+    organization: null,
+  };
+  await grantBetaAccess({
+    ...identity,
+    outboundEnabled: true,
+    updatedBy: 'integration-test',
+  });
+  const context = await findOrCreateExternalContext(identity);
+  const alias = context.user.email_alias;
+
+  const disabled = await disableAccount({
+    userId: context.user.id,
+    reason: 'Lifecycle test',
+    updatedBy: 'integration-test',
+  });
+  assert.equal(disabled.user.accountStatus, 'disabled');
+  await assert.rejects(
+    findOrCreateExternalContext(identity),
+    (error) => error.code === 'account_disabled',
+  );
+  const blockedSend = await sendEmail({
+    userId: context.user.id,
+    requestId: '47000000-0000-4000-8000-000000000001',
+    toEmail: 'blocked@example.com',
+    subject: 'Blocked',
+    textBody: 'This must not reach even the mock provider.',
+  });
+  assert.equal(blockedSend.providerCalled, false);
+  assert.equal(blockedSend.error.code, 'account_disabled');
+
+  const enabled = await enableAccount({
+    userId: context.user.id,
+    updatedBy: 'integration-test',
+  });
+  assert.equal(enabled.user.accountStatus, 'active');
+  await findOrCreateExternalContext(identity);
+
+  await ingestInboundMessage(normalizeInboundPayload({
+    provider: 'cloudflare',
+    from: 'private@example.com',
+    to: alias,
+    subject: 'Private subject',
+    text: 'Private body',
+    messageId: '<private-lifecycle@example.com>',
+    date: 'Thu, 30 Jul 2026 12:00:00 -0700',
+  }));
+  const anonymized = await anonymizeAccount({
+    userId: context.user.id,
+    confirmAlias: alias,
+    reason: 'User requested deletion',
+    updatedBy: 'integration-test',
+  });
+  assert.equal(anonymized.changed, true);
+  assert.equal(anonymized.user.accountStatus, 'anonymized');
+
+  const messages = await query(
+    'SELECT from_email, to_email, subject, text_body, provider_message_id FROM messages WHERE user_id = $1',
+    [context.user.id],
+  );
+  assert.equal(messages.rows.every((message) => (
+    message.from_email === 'redacted@invalid'
+    && message.to_email === 'redacted@invalid'
+    && message.subject === ''
+    && message.text_body === ''
+    && message.provider_message_id === null
+  )), true);
+  const retainedAlias = await query(
+    'SELECT status FROM user_email_aliases WHERE email_alias = $1',
+    [alias],
+  );
+  assert.equal(retainedAlias.rowCount, 1);
+  const identities = await query(
+    'SELECT count(*)::int AS count FROM user_identities WHERE user_id = $1',
+    [context.user.id],
+  );
+  assert.equal(identities.rows[0].count, 0);
+  const inbound = await ingestInboundMessage(normalizeInboundPayload({
+    provider: 'cloudflare',
+    from: 'later@example.com',
+    to: alias,
+    subject: 'Must not store',
+    text: 'Must not store',
+    messageId: '<after-anonymize@example.com>',
+    date: 'Thu, 30 Jul 2026 12:05:00 -0700',
+  }));
+  assert.deepEqual(inbound, { stored: false, reason: 'recipient_disabled' });
+  const grant = await getBetaAccessPolicy(identity);
+  assert.equal(grant.accessStatus, 'disabled');
+  assert.equal(grant.outboundEnabled, false);
 });
 
 test('OpenAI Apps context endpoint accepts _meta and reuses identity/session rows', async () => {

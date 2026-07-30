@@ -1,9 +1,9 @@
 # Authenticated Production Cutover
 
 This runbook promotes Shoot Email from the OAuth staging demonstration to a
-controlled production email loop. Production remains closed to outbound sends
-except for explicitly allowlisted Auth0 subjects until the rollout mode is
-intentionally changed.
+controlled production email loop. Production MCP access is limited to active
+database beta grants derived from validated Auth0 identities. Real outbound
+delivery additionally requires the grant's outbound permission.
 
 ## Production Topology
 
@@ -33,11 +33,13 @@ Provisioned on 2026-07-27:
 - Neon database: `shoot_email_production`
 - Hyperdrive: `shoot-email-neon-production`, caching disabled, five origin
   connections
-- Database migrations: 13 applied, zero users and zero messages at provisioning
+- Database migrations: 15 applied, including private-beta access and account
+  lifecycle controls
 - Cloudflare Email Sending credentials: installed as Worker secrets
 - Global outbound delivery: enabled behind database quotas and the emergency
   kill switch
-- OAuth rollout mode: allowlist, with two production acceptance identities
+- OAuth rollout mode: database allowlist, with two production acceptance
+  identities preserved by the beta-grant backfill
 
 The production Worker passes health, database readiness, protected-resource
 metadata, unauthenticated OAuth challenge, real inbound routing, and guarded
@@ -47,16 +49,16 @@ real outbound acceptance checks at Cloudflare's edge.
 
 Real delivery is protected by independent controls:
 
-1. `OAUTH_OUTBOUND_ROLLOUT_MODE=allowlist` blocks `send_text_email` unless the
-   validated Auth0 `sub` claim appears in `OAUTH_OUTBOUND_ALLOWED_SUBJECTS`.
-2. `OUTBOUND_SENDING_ENABLED=false` is the global emergency kill switch.
-3. Database-backed hourly, daily, new-recipient, session, and minimum-interval
+1. `OAUTH_BETA_ACCESS_MODE=enforced` blocks all production MCP access unless
+   the validated Auth0 identity has an active database beta grant.
+2. `OAUTH_OUTBOUND_ROLLOUT_MODE=database_allowlist` blocks `send_text_email`
+   unless that active grant also enables outbound delivery.
+3. `OUTBOUND_SENDING_ENABLED=false` is the global emergency kill switch.
+4. Database-backed hourly, daily, new-recipient, session, and minimum-interval
    limits are reserved transactionally before the provider call.
-4. Per-user suspension can block an individual mailbox without affecting
-   inbound delivery.
-
-`OAUTH_OUTBOUND_ALLOWED_SUBJECTS` is a Worker secret. Do not commit Auth0
-subjects to the Wrangler configuration.
+5. Account disablement blocks MCP access, inbound ingestion, and provider
+   calls. Sending suspension remains available as a narrower outbound-only
+   control.
 
 ## Provisioning Order
 
@@ -89,7 +91,6 @@ subjects to the Wrangler configuration.
    ```text
    INBOUND_WEBHOOK_TOKEN
    CLOUDFLARE_EMAIL_API_TOKEN
-   OAUTH_OUTBOUND_ALLOWED_SUBJECTS
    ```
 
    When loading the Email Sending credential from `.env`, reject an empty
@@ -111,8 +112,9 @@ subjects to the Wrangler configuration.
    `CLOUDFLARE_FROM_EMAIL` may remain empty. In that case, outbound messages
    use the user's current Shoot Email alias as the sender address.
 
-6. Deploy with `MAIL_PROVIDER=cloudflare`,
-   `OUTBOUND_SENDING_ENABLED=false`, and rollout mode `allowlist`.
+6. Deploy initially with `MAIL_PROVIDER=cloudflare`,
+   `OUTBOUND_SENDING_ENABLED=false`, `OAUTH_BETA_ACCESS_MODE=enforced`, and
+   rollout mode `database_allowlist`.
 7. Run:
 
    ```bash
@@ -121,8 +123,9 @@ subjects to the Wrangler configuration.
 
 8. Point the Email Routing Worker at the production webhook, deploy it, and
    confirm a real inbound message reaches the intended OAuth mailbox.
-9. Change only `OUTBOUND_SENDING_ENABLED` to `true`, redeploy, and send one
-   allowlisted message.
+9. Add one database beta grant with outbound enabled, change only
+   `OUTBOUND_SENDING_ENABLED` to `true`, redeploy, and send one acceptance
+   message.
 
 ## Acceptance Test
 
@@ -130,20 +133,23 @@ For two different OAuth identities:
 
 - Initialize each mailbox twice and confirm stable, distinct addresses.
 - Confirm neither identity can retrieve the other mailbox's messages.
-- Send a real message from the allowlisted identity and retry the same request
+- Send a real message from an outbound-enabled beta identity and retry the same request
   ID; only one provider call may occur.
 - Reply from the recipient and retrieve the complete pending message.
 - Retrieve again before acknowledgement and confirm the message remains
   pending.
 - Acknowledge it and confirm it no longer appears in the pending inbox.
-- Confirm the non-allowlisted identity receives
-  `outbound_rollout_not_allowed`.
+- Confirm an identity without a beta grant receives an HTTP 403 OAuth resource
+  denial before any mailbox tool executes.
+- Confirm an active read-only grant can use mailbox tools but receives
+  `outbound_rollout_not_allowed` from `send_text_email`.
 
 Inspect the delivered message headers for SPF, DKIM, and DMARC pass results.
 
 ## Production Acceptance Record
 
-The allowlisted production path passed its first complete acceptance test on
+The former static-allowlist production path passed its first complete
+acceptance test on
 2026-07-27:
 
 - OAuth mailbox: `u_978fee62@yoyowza.com`
@@ -159,13 +165,15 @@ The allowlisted production path passed its first complete acceptance test on
 - The reply remained pending across two retrievals, then disappeared from the
   pending inbox only after explicit acknowledgement.
 
-The production OAuth rollout remains restricted to explicitly configured Auth0
-subjects. On 2026-07-27, a live non-allowlisted production identity attempted
+At that time, the production OAuth rollout was restricted by a static Auth0
+subject secret. On 2026-07-27, a live non-allowlisted production identity attempted
 request `5c8070b3-96cc-4ede-83a7-f3f5ec1e779e` and received the versioned MCP
 error `outbound_rollout_not_allowed`. The response returned through the normal
 tool contract rather than a pre-tool HTTP rejection, and a direct production
 database query confirmed that zero messages were persisted for the denied
-request. The approved-subject allowlist was restored immediately afterward.
+request. The approved-subject static allowlist was restored immediately
+afterward. This paragraph is a historical acceptance record, not the current
+onboarding procedure.
 
 The two-mailbox isolation check completed on 2026-07-28:
 
@@ -182,8 +190,9 @@ The two-mailbox isolation check completed on 2026-07-28:
   `get_message` call using Account A's message ID returned
   `message_not_found`.
 
-All production cutover acceptance items are complete. Keep rollout mode on
-`allowlist` until operational monitoring and broader user onboarding are ready.
+All initial production cutover acceptance items are complete. Keep beta access
+enforced and rollout mode on `database_allowlist` throughout the private beta.
+Use `docs/operations/PRIVATE_BETA.md` for current onboarding procedures.
 
 ## Emergency Rollback
 
@@ -205,7 +214,7 @@ mail to the synthetic demo principal.
   failures, and global quota rejection.
 - Monitor Auth0 `tpc_` Dynamic Client Registration applications and remove only
   abandoned registrations.
-- Keep rollout mode on `allowlist` until multiple real-user acceptance runs
-  have passed.
+- Keep beta access enforced and rollout mode on `database_allowlist` until the
+  private-beta exit criteria have passed.
 - Record deployment version, Hyperdrive ID, migration result, test message IDs,
   and rollback result after every cutover rehearsal.
