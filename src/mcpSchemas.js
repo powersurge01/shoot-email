@@ -182,6 +182,11 @@ export const mcpOutputSchemas = {
       sendingStatus: z.enum(['active', 'suspended']),
       suspensionReason: z.string().nullable(),
       latestAttemptAt: nullableDateTime,
+      controls: z.object({
+        effectiveOutboundEnabled: z.boolean(),
+        deploymentEnabled: z.boolean(),
+        runtimeEnabled: z.boolean(),
+      }),
     }).optional(),
     identity: senderIdentity.optional(),
     account: z.object({ tier: z.enum(['guest', 'registered']) }).optional(),

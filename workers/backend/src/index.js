@@ -55,9 +55,16 @@ async function handleBackendRequestWithEnvironment(request, env, options) {
       return jsonResponse({ status: 404, body: { ok: false, error: 'Not found.' } });
     }
     if (!remoteMcpAuthorization.configured) {
+      console.error(JSON.stringify({
+        event: 'mcp.authorization.misconfigured',
+      }));
       return remoteMcpMisconfiguredResponse();
     }
     if (!remoteMcpAuthorization.authorized) {
+      console.warn(JSON.stringify({
+        event: 'mcp.authorization.rejected',
+        authentication: oauthAuthorization.enabled ? 'oauth' : 'demo_bearer',
+      }));
       return oauthAuthorization.enabled
         ? remoteMcpOAuthUnauthorizedResponse(request)
         : remoteMcpUnauthorizedResponse();
@@ -116,11 +123,20 @@ async function handleBackendRequestWithEnvironment(request, env, options) {
 
       if (request.method === 'POST' && url.pathname === '/webhooks/email/inbound') {
         const body = await readJsonBody(request);
-        return jsonResponse(await handleInboundWebhook({
+        const result = await handleInboundWebhook({
           authorization: request.headers.get('authorization'),
           body,
           token: env.INBOUND_WEBHOOK_TOKEN,
+        });
+        console[result.status === 200 ? 'log' : 'warn'](JSON.stringify({
+          event: result.status === 200
+            ? 'inbound.webhook.completed'
+            : 'inbound.webhook.rejected',
+          status: result.status,
+          stored: result.body.stored === true,
+          reason: result.body.reason || null,
         }));
+        return jsonResponse(result);
       }
 
       if (request.method === 'POST' && url.pathname === '/apps/openai/context') {
@@ -143,7 +159,10 @@ async function handleBackendRequestWithEnvironment(request, env, options) {
       ? 400
       : 500;
     if (status === 500) {
-      console.error('Backend Worker request failed.', error);
+      console.error(JSON.stringify({
+        event: 'backend.request.failed',
+        code: error.code || 'internal_error',
+      }));
     }
     return jsonResponse({
       status,

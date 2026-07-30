@@ -354,9 +354,23 @@ npx shoot-email abuse suspend <user-id> --reason "Repeated abusive sends"
 npx shoot-email abuse reactivate <user-id>
 ```
 
-Set `OUTBOUND_SENDING_ENABLED=false` as the global emergency kill switch. All
-policy rejections are persisted by request ID and returned as structured JSON;
-retrying a rejected request neither reevaluates it nor consumes quota.
+Run trusted beta operations directly against the intended database:
+
+```bash
+npx shoot-email ops outbound status
+npx shoot-email ops outbound disable --actor <operator> --reason <reason>
+npx shoot-email ops outbound enable --actor <operator>
+npx shoot-email ops user lookup --alias <address>
+npx shoot-email ops report
+```
+
+The database runtime switch can stop new real-provider reservations without a
+Worker redeployment. `OUTBOUND_SENDING_ENABLED=false` remains an independent
+deployment-level emergency switch. Either layer can stop delivery, and neither
+can enable the other. All policy rejections are persisted by request ID and
+returned as structured JSON; retrying a rejected request neither reevaluates it
+nor consumes quota. See
+[`docs/operations/CONTROLLED_BETA.md`](docs/operations/CONTROLLED_BETA.md).
 
 Return up to 50 oldest pending messages with full text bodies as structured JSON:
 

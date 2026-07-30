@@ -47,6 +47,35 @@ test('CLI contract works end to end through subprocess JSON and exit codes', asy
   assert.equal(status.body.outbound.available, true);
   assert.equal(status.body.quotas.userHourly.remaining, 3);
 
+  const runtimeStatus = await runCli(['ops', 'outbound', 'status']);
+  assertContractSuccess(runtimeStatus.body);
+  assert.equal(runtimeStatus.body.controls.runtimeEnabled, true);
+
+  const disabled = await runCli([
+    'ops', 'outbound', 'disable',
+    '--reason', 'CLI contract test',
+    '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(disabled.body);
+  assert.equal(disabled.body.controls.runtimeEnabled, false);
+
+  const report = await runCli(['ops', 'report']);
+  assertContractSuccess(report.body);
+  assert.equal(report.body.controls.runtimeEnabled, false);
+  assert.equal(report.body.users.total, 1);
+
+  const lookup = await runCli([
+    'ops', 'user', 'lookup', '--alias', address,
+  ]);
+  assertContractSuccess(lookup.body);
+  assert.equal(lookup.body.users[0].emailAlias, address);
+
+  const enabled = await runCli([
+    'ops', 'outbound', 'enable', '--actor', 'cli-test',
+  ]);
+  assertContractSuccess(enabled.body);
+  assert.equal(enabled.body.controls.runtimeEnabled, true);
+
   const requestId = '90000000-0000-4000-8000-000000000001';
   const sendArgs = [
     'send',

@@ -2,6 +2,7 @@ const baseUrl = process.env.PRODUCTION_BACKEND_URL
   || 'https://mcp.shoot-email.yoyowza.com';
 const expectedResource = process.env.PRODUCTION_MCP_RESOURCE
   || `${baseUrl.replace(/\/+$/, '')}/mcp`;
+const timeoutMs = Number(process.env.PRODUCTION_SMOKE_TIMEOUT_MS || 10_000);
 
 const health = await getJson('/health');
 assert(
@@ -45,6 +46,7 @@ const unauthorized = await fetch(new URL('/mcp', baseUrl), {
       clientInfo: { name: 'shoot-email-production-smoke', version: '1.0.0' },
     },
   }),
+  signal: AbortSignal.timeout(timeoutMs),
 });
 assert(unauthorized.status === 401, 'Unauthenticated MCP request was not rejected.');
 assert(
@@ -60,12 +62,24 @@ console.log(JSON.stringify({
   resource: metadata.body.resource,
   authorizationServer: metadata.body.authorization_servers[0],
   unauthenticatedMcpStatus: unauthorized.status,
+  latencyMs: {
+    health: health.latencyMs,
+    readiness: ready.latencyMs,
+    metadata: metadata.latencyMs,
+  },
 }, null, 2));
 
 async function getJson(pathname) {
-  const response = await fetch(new URL(pathname, baseUrl));
+  const startedAt = performance.now();
+  const response = await fetch(new URL(pathname, baseUrl), {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
   const body = await response.json().catch(() => ({}));
-  return { response, body };
+  return {
+    response,
+    body,
+    latencyMs: Math.round(performance.now() - startedAt),
+  };
 }
 
 function assert(condition, message) {

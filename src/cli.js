@@ -8,15 +8,20 @@ import { migrate } from './migrate.js';
 import {
   acknowledgeMessages,
   clearSenderDisplayName,
+  disableRuntimeOutboundSending,
+  enableRuntimeOutboundSending,
   getAbuseStatus,
   getCurrentUser,
+  getOperationsReport,
   getOutboundStatus,
+  getRuntimeOutboundStatus,
   getSenderIdentity,
   getServiceStatus,
   initMailbox,
   listHistory,
   listInbox,
   listOutboundHistory,
+  lookupOperationalUsers,
   readMessage,
   reactivateSending,
   sendEmail,
@@ -137,6 +142,58 @@ abuse
   .description('Reactivate outbound sending for a user')
   .argument('<user-id>', 'internal user ID')
   .action(runJson(async (userId) => reactivateSending(userId)));
+
+const ops = program
+  .command('ops')
+  .description('Run trusted operator workflows; never exposed through MCP');
+
+ops
+  .command('report')
+  .description('Return runtime controls and a 24-hour operational snapshot')
+  .action(runJson(async () => getOperationsReport()));
+
+const opsOutbound = ops
+  .command('outbound')
+  .description('Inspect or change the database-backed outbound kill switch');
+
+opsOutbound
+  .command('status')
+  .description('Return deployment and runtime outbound control state')
+  .action(runJson(async () => getRuntimeOutboundStatus()));
+
+opsOutbound
+  .command('disable')
+  .description('Disable real provider sends without redeploying the Worker')
+  .requiredOption('--reason <reason>', 'operator-visible reason, 1-500 characters')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (options) => disableRuntimeOutboundSending({
+    reason: options.reason,
+    updatedBy: options.actor,
+  })));
+
+opsOutbound
+  .command('enable')
+  .description('Enable runtime sending; deployment controls still apply')
+  .requiredOption('--actor <actor>', 'operator or automation identity')
+  .action(runJson(async (options) => enableRuntimeOutboundSending({
+    updatedBy: options.actor,
+  })));
+
+const opsUser = ops
+  .command('user')
+  .description('Resolve an internal user for trusted administration');
+
+opsUser
+  .command('lookup')
+  .description('Find users by any current/retired alias or external identity')
+  .option('--alias <email>', 'current or retired Shoot Email address')
+  .option('--provider <provider>', 'external identity provider namespace')
+  .option('--subject <subject>', 'external provider subject')
+  .action(runJson(async (options) => lookupOperationalUsers({
+    emailAlias: options.alias,
+    provider: options.provider,
+    providerSubject: options.subject,
+  })));
 
 program
   .command('send')

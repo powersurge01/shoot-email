@@ -404,6 +404,26 @@ arguments.
   synthetic messages only, allow outbound contract testing only through the
   mock provider, and keep real outbound delivery disabled.
 
+### Controlled Beta Operations
+
+Keep administrative writes outside MCP and authenticated user-facing HTTP
+routes. Trusted operator CLI commands may connect directly to production
+Postgres from a controlled local or CI environment.
+
+- Combine the deployment outbound switch and database runtime switch with
+  logical AND. Neither layer may enable the other.
+- Apply runtime outbound changes under the same global policy lock used by
+  send reservations. Persist an operator identity, reason, and timestamp.
+- Preserve rejected request IDs across re-enable so retries cannot send later.
+- Emit structured operational event metadata without message content,
+  addresses, Auth0 subjects, tokens, or provider payloads.
+- Treat Auth0 DCR cleanup as a manual, evidence-based operation. Audit tools
+  must never delete clients automatically.
+- Run synthetic production checks without mailbox authentication or email
+  delivery unless a separately reviewed canary identity is introduced.
+- Verify recovery against an isolated Neon branch and refuse to run recovery
+  verification against the production connection string.
+
 ## Practical First Milestone
 
 The first working milestone should prove:

@@ -18,11 +18,14 @@ import {
   createUserIdentity,
   findOrCreateChatSession,
   findUserByIdentity,
+  findUsersForOperator,
   failOutboundMessage,
   getMessageForUser,
   getLatestOutboundAttempt,
+  getOperationsSnapshot,
   getOutboundMessageForUser,
   getOutboundUsageSnapshot,
+  getRuntimeControls,
   getUserByAlias,
   getUserById,
   listInboundMessages,
@@ -30,6 +33,7 @@ import {
   reactivateUserSending,
   recordInboundRelationship,
   reserveOutboundMessage,
+  setRuntimeOutboundSending,
   suspendUserSending,
   touchUserIdentity,
   updateUserAccountTier,
@@ -179,6 +183,9 @@ export async function sendEmail({
     event: 'outbound.reservation.completed',
     created: reservation.created,
     rejected: reservation.rejected === true,
+    rejectionCode: reservation.rejected
+      ? reservation.message.delivery_error_code
+      : null,
   }));
 
   if (!reservation.created) {
@@ -236,6 +243,11 @@ export async function sendEmail({
       providerCalled: true,
     });
   } catch (error) {
+    console.error(JSON.stringify({
+      event: 'outbound.provider.failed',
+      code: error.code || 'provider_error',
+      outcomeKnown: error.outcomeKnown === true,
+    }));
     const deliveryStatus = error.outcomeKnown ? 'failed' : 'unknown';
     const message = await failOutboundMessage({
       userId: user.id,
@@ -445,10 +457,14 @@ export async function getAbuseStatus(userId) {
   }
 
   const config = getConfig();
+  const runtimeControls = await getRuntimeControls();
   const usage = await getOutboundUsageSnapshot(user.id);
   return {
     ok: true,
-    outboundEnabled: config.outboundAbuse.enabled,
+    outboundEnabled:
+      config.outboundAbuse.enabled
+      && runtimeControls.outbound_sending_enabled,
+    controls: serializeRuntimeControls(runtimeControls, config),
     user: serializeAbuseUser(user),
     limits: {
       global: config.outboundAbuse.global,
@@ -468,6 +484,7 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
   const user = await resolveUser(userId);
   const config = getConfig();
   const provider = createMailProvider();
+  const runtimeControls = await getRuntimeControls();
   const usageRows = await getOutboundUsageSnapshot(user.id, chatSessionId);
   const latestAttempt = await getLatestOutboundAttempt(user.id);
   const tierLimits = config.outboundAbuse[user.account_tier];
@@ -478,7 +495,10 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
       && (config.cloudflareFromEmail || user.email_alias),
   );
   const outboundEnabled = provider.isTestProvider === true
-    || config.outboundAbuse.enabled;
+    || (
+      config.outboundAbuse.enabled
+      && runtimeControls.outbound_sending_enabled
+    );
 
   return {
     ok: true,
@@ -504,6 +524,7 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
       sendingStatus: user.sending_status,
       suspensionReason: user.sending_suspension_reason,
       latestAttemptAt: latestAttempt,
+      controls: serializePublicRuntimeControls(runtimeControls, config),
     },
     identity: serializeSenderIdentity(user).identity,
     account: {
@@ -550,6 +571,95 @@ export async function getServiceStatus(userId, { chatSessionId } = {}) {
         defaults: MESSAGE_BATCH_DEFAULTS,
         maximums: MESSAGE_BATCH_MAXIMUMS,
       },
+    },
+  };
+}
+
+export async function getRuntimeOutboundStatus() {
+  const config = getConfig();
+  const controls = await getRuntimeControls();
+  return {
+    ok: true,
+    controls: serializeRuntimeControls(controls, config),
+  };
+}
+
+export async function disableRuntimeOutboundSending({ reason, updatedBy }) {
+  const normalizedReason = normalizeOperatorText(reason, 'reason', 500);
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const controls = await setRuntimeOutboundSending({
+    enabled: false,
+    reason: normalizedReason,
+    updatedBy: actor,
+  });
+  return {
+    ok: true,
+    controls: serializeRuntimeControls(controls, getConfig()),
+  };
+}
+
+export async function enableRuntimeOutboundSending({ updatedBy }) {
+  const actor = normalizeOperatorText(updatedBy, 'updatedBy', 200);
+  const controls = await setRuntimeOutboundSending({
+    enabled: true,
+    reason: null,
+    updatedBy: actor,
+  });
+  return {
+    ok: true,
+    controls: serializeRuntimeControls(controls, getConfig()),
+  };
+}
+
+export async function lookupOperationalUsers({
+  emailAlias,
+  provider,
+  providerSubject,
+}) {
+  const hasAlias = typeof emailAlias === 'string' && emailAlias.trim();
+  const hasIdentity = (
+    typeof provider === 'string'
+    && provider.trim()
+    && typeof providerSubject === 'string'
+    && providerSubject.trim()
+  );
+  if ((hasAlias ? 1 : 0) + (hasIdentity ? 1 : 0) !== 1) {
+    throw requestError(
+      'invalid_user_lookup',
+      'Provide either emailAlias or both provider and providerSubject.',
+    );
+  }
+  const users = await findUsersForOperator({
+    emailAlias: hasAlias ? emailAlias.trim().toLowerCase() : null,
+    provider: hasIdentity ? provider.trim() : null,
+    providerSubject: hasIdentity ? providerSubject.trim() : null,
+  });
+  return {
+    ok: true,
+    users: users.map((user) => ({
+      ...serializeAbuseUser(user),
+      createdAt: user.created_at,
+      identities: user.identities,
+    })),
+  };
+}
+
+export async function getOperationsReport() {
+  const snapshot = await getOperationsSnapshot();
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    environment: getConfig().environment,
+    controls: serializeRuntimeControls(snapshot.controls, getConfig()),
+    users: snapshot.users,
+    messagesLast24Hours: snapshot.messages.map((row) => ({
+      direction: row.direction,
+      status: row.status,
+      count: row.count,
+    })),
+    pendingInbound: {
+      count: snapshot.pending.count,
+      oldestCreatedAt: snapshot.pending.oldest_created_at,
     },
   };
 }
@@ -1106,6 +1216,40 @@ function serializeAbuseUser(user) {
     suspendedAt: user.sending_suspended_at,
     suspensionReason: user.sending_suspension_reason,
   };
+}
+
+function serializeRuntimeControls(controls, config) {
+  return {
+    effectiveOutboundEnabled:
+      config.outboundAbuse.enabled
+      && controls.outbound_sending_enabled,
+    deploymentEnabled: config.outboundAbuse.enabled,
+    runtimeEnabled: controls.outbound_sending_enabled,
+    disabledReason: controls.outbound_disabled_reason,
+    updatedBy: controls.updated_by,
+    updatedAt: controls.updated_at,
+  };
+}
+
+function serializePublicRuntimeControls(controls, config) {
+  return {
+    effectiveOutboundEnabled:
+      config.outboundAbuse.enabled
+      && controls.outbound_sending_enabled,
+    deploymentEnabled: config.outboundAbuse.enabled,
+    runtimeEnabled: controls.outbound_sending_enabled,
+  };
+}
+
+function normalizeOperatorText(value, field, maxCharacters) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!normalized || countCharacters(normalized) > maxCharacters) {
+    throw requestError(
+      `invalid_${field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
+      `${field} must contain 1 to ${maxCharacters} characters.`,
+    );
+  }
+  return normalized;
 }
 
 function usageMap(rows) {

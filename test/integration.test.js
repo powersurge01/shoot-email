@@ -20,10 +20,14 @@ const { resetDatabase } = await import('../src/resetDb.js');
 const {
   acknowledgeMessages,
   clearSenderDisplayName,
+  disableRuntimeOutboundSending,
+  enableRuntimeOutboundSending,
   findOrCreateExternalContext,
   findOrCreateOpenAiContext,
   getAbuseStatus,
+  getOperationsReport,
   getOutboundStatus,
+  getRuntimeOutboundStatus,
   getSenderIdentity,
   getServiceStatus,
   initMailbox,
@@ -31,6 +35,7 @@ const {
   listHistory,
   listInbox,
   listOutboundHistory,
+  lookupOperationalUsers,
   readMessage,
   reactivateSending,
   sendEmail,
@@ -622,6 +627,73 @@ test('session limits, suspension, and the global kill switch reject before provi
 
     assert.equal(providerCalls, 1);
   });
+});
+
+test('runtime outbound control blocks provider calls and preserves rejected idempotency', async () => {
+  const initialized = await initMailbox();
+  let providerCalls = 0;
+  const provider = countingProvider(() => {
+    providerCalls += 1;
+  });
+
+  const disabled = await disableRuntimeOutboundSending({
+    reason: 'Integration test emergency stop',
+    updatedBy: 'integration-test',
+  });
+  assert.equal(disabled.controls.runtimeEnabled, false);
+  assert.equal(disabled.controls.effectiveOutboundEnabled, false);
+
+  const request = {
+    requestId: '45000000-0000-4000-8000-000000000001',
+    toEmail: 'runtime-disabled@example.com',
+    subject: 'Runtime disabled',
+    textBody: 'This must not reach the provider.',
+    mailProvider: provider,
+  };
+  const rejected = await sendEmail(request);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.providerCalled, false);
+  assert.equal(rejected.error.code, 'sending_disabled');
+  assert.equal(rejected.error.limitType, 'runtime_kill_switch');
+  assert.equal(providerCalls, 0);
+
+  const report = await getOperationsReport();
+  assert.equal(report.controls.runtimeEnabled, false);
+  assert.equal(report.messagesLast24Hours.some(
+    (row) => row.direction === 'outbound'
+      && row.status === 'rejected'
+      && row.count === 1,
+  ), true);
+
+  const enabled = await enableRuntimeOutboundSending({
+    updatedBy: 'integration-test',
+  });
+  assert.equal(enabled.controls.runtimeEnabled, true);
+  assert.equal(enabled.controls.disabledReason, null);
+
+  const replay = await sendEmail(request);
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(replay.providerCalled, false);
+  assert.equal(replay.error.limitType, 'runtime_kill_switch');
+  assert.equal(providerCalls, 0);
+
+  const sent = await sendEmail({
+    ...request,
+    requestId: '45000000-0000-4000-8000-000000000002',
+  });
+  assert.equal(sent.ok, true);
+  assert.equal(sent.providerCalled, true);
+  assert.equal(providerCalls, 1);
+
+  const status = await getRuntimeOutboundStatus();
+  assert.equal(status.controls.runtimeEnabled, true);
+  assert.equal(status.controls.updatedBy, 'integration-test');
+
+  const byAlias = await lookupOperationalUsers({
+    emailAlias: initialized.user.email_alias,
+  });
+  assert.equal(byAlias.users.length, 1);
+  assert.equal(byAlias.users[0].id, initialized.user.id);
 });
 
 test('inbox paginates full pending messages and acknowledgement moves them to history', async () => {

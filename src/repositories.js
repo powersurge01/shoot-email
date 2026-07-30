@@ -90,6 +90,59 @@ export async function findUserByIdentity({
   return result.rows[0] || null;
 }
 
+export async function findUsersForOperator({
+  emailAlias,
+  provider,
+  providerSubject,
+}) {
+  const selector = emailAlias
+    ? {
+        clause: `
+          users.id IN (
+            SELECT user_id
+            FROM user_email_aliases
+            WHERE email_alias = lower($1)
+          )
+        `,
+        params: [emailAlias],
+      }
+    : {
+        clause: `
+          users.id IN (
+            SELECT user_id
+            FROM user_identities
+            WHERE provider = $1 AND provider_subject = $2
+          )
+        `,
+        params: [provider, providerSubject],
+      };
+  const result = await query(
+    `
+      SELECT
+        ${QUALIFIED_USER_SELECT},
+        COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'provider', user_identities.provider,
+              'subject', user_identities.provider_subject,
+              'organization', user_identities.provider_organization,
+              'lastSeenAt', user_identities.last_seen_at
+            )
+            ORDER BY user_identities.provider, user_identities.provider_subject
+          ) FILTER (WHERE user_identities.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS identities
+      FROM users
+      LEFT JOIN user_identities ON user_identities.user_id = users.id
+      WHERE ${selector.clause}
+      GROUP BY users.id
+      ORDER BY users.created_at
+    `,
+    selector.params,
+  );
+  return result.rows;
+}
+
 export async function createUserIdentity({
   userId,
   provider,
@@ -677,6 +730,110 @@ export async function reactivateUserSending(userId) {
   return result.rows[0] || null;
 }
 
+export async function getRuntimeControls(executor = query) {
+  const result = await executor(
+    `
+      SELECT
+        outbound_sending_enabled,
+        outbound_disabled_reason,
+        updated_by,
+        updated_at
+      FROM service_runtime_controls
+      WHERE singleton = TRUE
+    `,
+  );
+  if (result.rowCount !== 1) {
+    throw new Error('Runtime service controls are not initialized.');
+  }
+  return result.rows[0];
+}
+
+export async function setRuntimeOutboundSending({
+  enabled,
+  reason,
+  updatedBy,
+}) {
+  return transaction(async (txQuery) => {
+    await txQuery(
+      `
+        INSERT INTO outbound_policy_locks (lock_key)
+        VALUES ('global')
+        ON CONFLICT (lock_key) DO NOTHING
+      `,
+    );
+    await txQuery(
+      `
+        SELECT lock_key
+        FROM outbound_policy_locks
+        WHERE lock_key = 'global'
+        FOR UPDATE
+      `,
+    );
+    const result = await txQuery(
+      `
+        UPDATE service_runtime_controls
+        SET outbound_sending_enabled = $1,
+            outbound_disabled_reason = $2,
+            updated_by = $3,
+            updated_at = transaction_timestamp()
+        WHERE singleton = TRUE
+        RETURNING
+          outbound_sending_enabled,
+          outbound_disabled_reason,
+          updated_by,
+          updated_at
+      `,
+      [enabled, enabled ? null : reason, updatedBy],
+    );
+    if (result.rowCount !== 1) {
+      throw new Error('Runtime service controls are not initialized.');
+    }
+    return result.rows[0];
+  });
+}
+
+export async function getOperationsSnapshot() {
+  const [controls, users, messages, pending] = await Promise.all([
+    getRuntimeControls(),
+    query(
+      `
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE sending_status = 'suspended')::int AS suspended,
+          count(*) FILTER (WHERE account_tier = 'registered')::int AS registered
+        FROM users
+      `,
+    ),
+    query(
+      `
+        SELECT
+          direction,
+          COALESCE(delivery_status, 'received') AS status,
+          count(*)::int AS count
+        FROM messages
+        WHERE created_at >= now() - interval '24 hours'
+        GROUP BY direction, COALESCE(delivery_status, 'received')
+        ORDER BY direction, status
+      `,
+    ),
+    query(
+      `
+        SELECT
+          count(*)::int AS count,
+          min(created_at) AS oldest_created_at
+        FROM messages
+        WHERE direction = 'inbound' AND processing_status = 'pending'
+      `,
+    ),
+  ]);
+  return {
+    controls,
+    users: users.rows[0],
+    messages: messages.rows,
+    pending: pending.rows[0],
+  };
+}
+
 export async function getOutboundUsageSnapshot(userId, chatSessionId) {
   const result = await query(
     `
@@ -851,6 +1008,15 @@ async function evaluateOutboundPolicy(txQuery, {
       'sending_disabled',
       'global_kill_switch',
       'Outbound sending is disabled by the service operator.',
+    );
+  }
+
+  const runtimeControls = await getRuntimeControls(txQuery);
+  if (!runtimeControls.outbound_sending_enabled) {
+    return rejection(
+      'sending_disabled',
+      'runtime_kill_switch',
+      'Outbound sending is temporarily disabled by the service operator.',
     );
   }
 

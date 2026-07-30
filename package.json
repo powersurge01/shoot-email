@@ -10,6 +10,7 @@
   "scripts": {
     "db:migrate": "node src/migrate.js",
     "db:reset": "node src/resetDb.js --yes",
+    "db:verify-recovery": "node src/verifyRecoveryDatabase.js",
     "start:tunnel": "cloudflared tunnel --config ~/.cloudflared/shoot-email-dev.yml run",
     "start:webhook": "node src/server.js",
     "start:mcp": "node src/mcpStdio.js",
@@ -28,8 +29,9 @@
     "smoke:hosted": "node src/smokeHosted.js",
     "smoke:remote-mcp": "node src/smokeRemoteMcp.js",
     "smoke:production": "node src/smokeProduction.js",
+    "ops:auth0:dcr-audit": "node src/auditAuth0Dcr.js",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "node --test test/aliasPolicy.test.js test/backendWorker.test.js test/config.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js test/remoteMcp.test.js",
+    "test:unit": "node --test test/aliasPolicy.test.js test/auth0DcrAudit.test.js test/backendWorker.test.js test/config.test.js test/emailRouterWorker.test.js test/inboundEmail.test.js test/openAiAppsContext.test.js test/mailProviders.test.js test/remoteMcp.test.js",
     "test:integration": "node src/runIntegrationTests.js"
   },
   "dependencies": {
